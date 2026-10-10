@@ -19,7 +19,8 @@ class CounterStore(context: Context) {
     )
 
     val count: Long get() = synchronized(lock) { readLong(COUNT, 0L).coerceIn(0L, MAX_COUNT) }
-    val goal: Int get() = synchronized(lock) { readInt(GOAL, DEFAULT_GOAL).coerceIn(1, MAX_GOAL) }
+    /** Zero means free counting; existing positive targets remain unchanged. */
+    val goal: Int get() = synchronized(lock) { readInt(GOAL, DEFAULT_GOAL).coerceIn(NO_GOAL, MAX_GOAL) }
     val darkTheme: Boolean get() = synchronized(lock) { readBoolean(DARK_THEME, true) }
     val vibrationEnabled: Boolean get() = synchronized(lock) { readBoolean(VIBRATION, true) }
     val displayLightEnabled: Boolean get() = synchronized(lock) { readBoolean(DISPLAY_LIGHT_ENABLED, true) }
@@ -38,7 +39,7 @@ class CounterStore(context: Context) {
     fun reset() = updateCount(0L)
 
     fun setGoal(value: Int) = synchronized(lock) {
-        commit(preferences.edit().putInt(GOAL, value.coerceIn(1, MAX_GOAL)))
+        commit(preferences.edit().putInt(GOAL, value.coerceIn(NO_GOAL, MAX_GOAL)))
     }
 
     fun setDarkTheme(enabled: Boolean) = synchronized(lock) {
@@ -78,9 +79,9 @@ class CounterStore(context: Context) {
             val label = entry.optString("label", "").trim()
             val savedCount = entry.optLong("count", -1L)
             val timestamp = entry.optLong("timestamp", -1L)
-            val savedGoal = entry.optInt("goal", DEFAULT_GOAL)
+            val savedGoal = readSessionGoal(entry)
             if (id.isBlank() || id.length > 100 || label.isBlank() || savedCount !in 0L..MAX_COUNT ||
-                timestamp < 0L || savedGoal !in 1..MAX_GOAL || !seenIds.add(id)) continue
+                timestamp < 0L || !seenIds.add(id)) continue
             result.add(Session(id, cleanLabel(label), savedCount, timestamp, savedGoal))
             if (result.size == MAX_SESSIONS) break
         }
@@ -120,12 +121,17 @@ class CounterStore(context: Context) {
     private fun readBoolean(key: String, fallback: Boolean): Boolean = try { preferences.getBoolean(key, fallback) } catch (_: ClassCastException) { fallback }
     private fun readString(key: String, fallback: String): String = try { preferences.getString(key, fallback) ?: fallback } catch (_: ClassCastException) { fallback }
     private fun cleanLabel(value: String) = value.trim().take(MAX_LABEL_LENGTH).ifBlank { DEFAULT_COUNTER_NAME }
+    private fun readSessionGoal(entry: JSONObject): Int {
+        val value = (entry.opt("goal") as? Number)?.toDouble() ?: return NO_GOAL
+        return if (value in NO_GOAL.toDouble()..MAX_GOAL.toDouble() && value % 1.0 == 0.0) value.toInt() else NO_GOAL
+    }
 
     companion object {
         const val PREFERENCES_NAME = "a_counter"
         const val MAX_COUNT = 999_999_999L
         const val MAX_GOAL = 999_999_999
-        const val DEFAULT_GOAL = 100
+        const val NO_GOAL = 0
+        const val DEFAULT_GOAL = NO_GOAL
         const val DEFAULT_COUNTER_NAME = "Counter"
         const val MAX_SESSIONS = 100
         const val MAX_LABEL_LENGTH = 160

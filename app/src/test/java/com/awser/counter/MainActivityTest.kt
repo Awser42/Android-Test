@@ -2,6 +2,7 @@ package com.awser.counter
 
 import android.app.AlertDialog
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Looper
 import android.view.View
 import android.widget.EditText
@@ -49,6 +50,17 @@ class MainActivityTest {
         assertTrue(counter.contentDescription.toString().contains("45"))
     }
 
+    @Test fun freshInstallCountsFreelyWithoutAnImplicitTargetOrProgressBar() {
+        assertEquals(0, store.goal)
+        assertEquals(View.GONE, tagged("progress").visibility)
+        repeat(27) { click("counter") }
+        assertEquals(27L, store.count)
+        assertEquals(0, store.goal)
+        assertEquals(View.GONE, tagged("progress").visibility)
+        assertTrue(countText().contains("27"))
+        assertFalse("Free counting must not show an unwanted target", countText().contains("Target"))
+    }
+
     @Test fun resetRequiresConfirmationAndCancelPreservesTheCount() {
         repeat(8) { click("counter") }
         click("reset")
@@ -74,6 +86,8 @@ class MainActivityTest {
         assertEquals(50, store.goal)
         val label = activity.window.decorView.findViewWithTag<TextView>("count_label")
         assertTrue(label.text.toString().contains("12"))
+        assertTrue(label.text.toString().contains("50"))
+        assertEquals(View.VISIBLE, tagged("progress").visibility)
         click("counter")
         assertEquals(13L, store.count)
     }
@@ -140,11 +154,11 @@ class MainActivityTest {
     @Test fun targetDialogSupportsPresetsAndRejectsInvalidCustomGoals() {
         repeat(4) { click("counter") }
         click("goal")
-        chooseItem(1)
+        chooseItem(2)
         assertEquals(50, store.goal)
         assertEquals(4L, store.count)
         click("goal")
-        chooseItem(3)
+        chooseItem(4)
         val custom = ShadowAlertDialog.getLatestAlertDialog()
         val input = custom.window!!.decorView.findViewWithTag<EditText>("custom_goal")
         input.setText("0")
@@ -159,6 +173,98 @@ class MainActivityTest {
         assertEquals(4L, store.count)
     }
 
+    @Test fun choosingNoTargetRemovesProgressWithoutDiscardingTheCount() {
+        repeat(9) { click("counter") }
+        click("goal")
+        chooseItem(1)
+        assertEquals(25, store.goal)
+        assertEquals(View.VISIBLE, tagged("progress").visibility)
+        click("goal")
+        chooseItem(0)
+        assertEquals(0, store.goal)
+        assertEquals(9L, store.count)
+        assertEquals(View.GONE, tagged("progress").visibility)
+        assertFalse(countText().contains("Target"))
+        click("counter")
+        assertEquals(10L, store.count)
+    }
+
+    @Test fun closingAndReopeningRestoresFreeCountAllPreferencesAndSavedSessions() {
+        repeat(11) { click("counter") }
+        click("rename")
+        val rename = ShadowAlertDialog.getLatestAlertDialog()
+        rename.window!!.decorView.findViewWithTag<EditText>("counter_name").setText("Evening")
+        clickDialogButton(rename, AlertDialog.BUTTON_POSITIVE)
+        click("goal")
+        chooseItem(0)
+        click("light")
+        click("theme")
+        click("vibration")
+        click("save")
+        val save = ShadowAlertDialog.getLatestAlertDialog()
+        save.window!!.decorView.findViewWithTag<EditText>("session_name").setText("Saved Evening")
+        clickDialogButton(save, AlertDialog.BUTTON_POSITIVE)
+        val session = store.sessions().single()
+        controller.pause().stop().destroy()
+        controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        activity = controller.get()
+        assertEquals(11L, store.count)
+        assertEquals(0, store.goal)
+        assertEquals("Evening", store.counterName)
+        assertFalse(store.darkTheme)
+        assertFalse(store.displayLightEnabled)
+        assertTrue(store.vibrationEnabled)
+        assertEquals(session, store.sessions().single())
+        assertEquals(0, session.goal)
+        assertTrue(countText().contains("11"))
+        assertFalse(countText().contains("Target"))
+        assertEquals(View.GONE, tagged("progress").visibility)
+        assertEquals("Evening", (tagged("counter_name_label") as TextView).text.toString())
+        click("history")
+        assertNotNull(ShadowAlertDialog.getLatestAlertDialog().window!!.decorView.findViewWithTag<View>("history_row_${session.id}"))
+    }
+
+    @Test fun rotationRetainsTheVisibleFreeCount() {
+        repeat(8) { click("counter") }
+        val rotated = Configuration(activity.resources.configuration).apply {
+            orientation = Configuration.ORIENTATION_LANDSCAPE
+            screenWidthDp = 800
+            screenHeightDp = 360
+        }
+        controller.configurationChange(rotated)
+        activity = controller.get()
+        assertEquals(8L, store.count)
+        assertEquals(0, store.goal)
+        assertTrue(countText().contains("8"))
+        assertEquals(View.GONE, tagged("progress").visibility)
+        click("counter")
+        assertEquals(9L, store.count)
+    }
+
+    @Test fun returningToForegroundRefreshesStateChangedByAnotherStore() {
+        repeat(2) { click("counter") }
+        controller.pause()
+        val updated = CounterStore(activity)
+        updated.updateCount(17L)
+        updated.setGoal(0)
+        updated.setCounterName("Updated elsewhere")
+        updated.setDarkTheme(false)
+        updated.setDisplayLightEnabled(false)
+        updated.setVibrationEnabled(true)
+        val session = updated.saveSession("Refreshed history")
+        controller.resume()
+        assertTrue(countText().contains("17"))
+        assertFalse(countText().contains("Target"))
+        assertEquals("Updated elsewhere", (tagged("counter_name_label") as TextView).text.toString())
+        assertEquals(View.GONE, tagged("progress").visibility)
+        assertTrue(tagged("counter").contentDescription.toString().contains("17"))
+        assertTrue(tagged("theme").contentDescription.toString().lowercase().contains("dark"))
+        assertTrue(tagged("light").contentDescription.toString().lowercase().contains("on"))
+        assertTrue(tagged("vibration").contentDescription.toString().lowercase().contains("on"))
+        click("history")
+        assertNotNull(ShadowAlertDialog.getLatestAlertDialog().window!!.decorView.findViewWithTag<View>("history_row_${session.id}"))
+    }
+
     @Test fun saveRestoreAndConfirmedDeleteWorkThroughHistoryControls() {
         repeat(7) { click("counter") }
         click("save")
@@ -167,6 +273,7 @@ class MainActivityTest {
         clickDialogButton(save, AlertDialog.BUTTON_POSITIVE)
         val session = store.sessions().single()
         assertEquals("Evening count", session.label)
+        assertEquals(0, session.goal)
         assertEquals(7L, store.count)
         repeat(2) { click("counter") }
         assertEquals(9L, store.count)
@@ -177,6 +284,8 @@ class MainActivityTest {
         clickDialogButton(action, AlertDialog.BUTTON_POSITIVE)
         assertEquals(7L, store.count)
         assertEquals("Evening count", store.counterName)
+        assertEquals(0, store.goal)
+        assertEquals(View.GONE, tagged("progress").visibility)
         click("history")
         history = ShadowAlertDialog.getLatestAlertDialog()
         history.window!!.decorView.findViewWithTag<View>("history_row_${session.id}").performClick()
@@ -225,4 +334,7 @@ class MainActivityTest {
         assertNotNull("A real accessible control exists for $tag", view)
         assertTrue("$tag is clickable", view.performClick())
     }
+
+    private fun tagged(tag: String): View = activity.window.decorView.findViewWithTag<View>(tag)
+    private fun countText(): String = (tagged("count_label") as TextView).text.toString()
 }

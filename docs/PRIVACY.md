@@ -4,7 +4,9 @@ Tasbih Counter - Zikr does not require an account. Counting and saved counts wor
 
 ## Data stored on your device
 
-The app stores your current count, saved counts, counter name, target and counter settings locally on your Android device. This counter data is not sent to an app server or passed to the advertising SDK. Local storage lets you continue counting after closing and reopening the app. Resetting a count sets the current total to zero. Deleting a saved count removes that item from the app. The app keeps the latest 100 saved counts. Uninstalling the app removes its local counter data.
+The app stores your current count, saved count snapshots, counter name, optional target and counter settings locally on your Android device. This counter data is not sent to an app server or passed to the advertising SDK. Your current count saves automatically so you can continue after closing and reopening the app. The Save count button creates a separate snapshot; it is not required to keep the current count.
+
+A fresh install has no target until you choose one, and you can turn the target off again. Existing counts and target settings are preserved when upgrading. Resetting a count sets the current total to zero. Deleting a saved snapshot removes that item from the app. The app keeps the latest 100 saved snapshots. Uninstalling the app or clearing its data removes its local counter data.
 
 ## Permissions
 

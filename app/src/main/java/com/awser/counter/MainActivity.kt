@@ -13,6 +13,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RadialGradient
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -29,6 +30,7 @@ import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.widget.Button
 import android.widget.EditText
@@ -42,6 +44,8 @@ import java.text.DateFormat
 import java.text.NumberFormat
 import java.util.Date
 import kotlin.math.min
+import kotlin.math.max
+import kotlin.math.ceil
 
 class MainActivity : Activity() {
     private lateinit var store: CounterStore
@@ -57,7 +61,8 @@ class MainActivity : Activity() {
     private lateinit var bannerAds: BannerAdController
     private lateinit var adPrivacyButton: Button
     private var adPrivacyRequired = false
-    private var resizeCounter: (() -> Unit)? = null
+    private var adaptiveContent: AdaptiveContent? = null
+    private var renderedDarkTheme: Boolean? = null
     private var progressAnimator: ObjectAnimator? = null
     private var palette = Palette(true)
     private val numberFormat = NumberFormat.getIntegerInstance()
@@ -69,7 +74,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 adPrivacyRequired = required
                 if (::adPrivacyButton.isInitialized) adPrivacyButton.visibility = if (required) View.VISIBLE else View.GONE
-                resizeCounter?.invoke()
+                adaptiveContent?.requestLayout()
             }
         }
         renderScreen()
@@ -78,6 +83,7 @@ class MainActivity : Activity() {
 
     private fun renderScreen() {
         palette = Palette(store.darkTheme)
+        renderedDarkTheme = store.darkTheme
         window.statusBarColor = palette.background
         window.navigationBarColor = palette.background
         @Suppress("DEPRECATION")
@@ -89,73 +95,56 @@ class MainActivity : Activity() {
             window.isNavigationBarContrastEnforced = false
             window.isStatusBarContrastEnforced = false
         }
-        root = FrameLayout(this).apply { background = QuietBackground(store.darkTheme) }
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            isVerticalScrollBarEnabled = false
-            clipToPadding = false
+        root = FrameLayout(this).apply {
+            tag = "counter_screen"
+            background = QuietBackground(store.darkTheme)
         }
-        val metrics = resources.displayMetrics
-        val wide = metrics.widthPixels > metrics.heightPixels && metrics.widthPixels / metrics.density >= 580f
-        val content = LinearLayout(this).apply {
-            orientation = if (wide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            gravity = if (wide) Gravity.CENTER_VERTICAL else Gravity.CENTER_HORIZONTAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+        val topPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
         }
-        val infoColumn = if (wide) LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 0, dp(20), 0) } else content
-        val counterColumn = if (wide) LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL } else content
-        fun measureDeviceWidth(usableWidth: Float, usableHeight: Float): Float = if (wide) {
-            min((usableHeight - 58f) * 360f / 418f, 360f).coerceAtLeast(190f)
-        } else {
-            val chromeHeight = 260f + if (adPrivacyRequired) 36f else 0f
-            min(min(usableWidth - 24f, 400f), (usableHeight - chromeHeight) * 360f / 418f).coerceAtLeast(190f)
-        }
-        val deviceWidth = measureDeviceWidth(metrics.widthPixels / metrics.density, metrics.heightPixels / metrics.density)
-        if (wide) {
-            content.addView(infoColumn, LinearLayout.LayoutParams(0, -2, 1f))
-            content.addView(counterColumn, LinearLayout.LayoutParams(dp(deviceWidth), -2))
-        }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val titleGroup = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titleGroup.addView(label("Tasbih Counter", 21f, palette.foreground).apply {
-            gravity = Gravity.START
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }, marginParams(-1, -2))
         titleGroup.addView(label("Z I K R", 9f, palette.muted), marginParams(-1, -2, top = 4))
-        header.addView(titleGroup, LinearLayout.LayoutParams(0, -2, 1f))
+        val headerControls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         themeButton = iconButton("theme", "Theme", "theme") {
-            counter.pauseAnimations()
-            progressAnimator?.cancel()
-            store.setDarkTheme(!store.darkTheme)
-            renderScreen()
+            if (persistAction { store.setDarkTheme(!store.darkTheme) }) {
+                counter.pauseAnimations()
+                progressAnimator?.cancel()
+                renderScreen()
+            }
         }.apply {
             contentDescription = if (store.darkTheme) "Switch to light theme" else "Switch to dark theme"
         }
         lightButton = iconButton("light", "Display light", "light") {
-            store.setDisplayLightEnabled(!store.displayLightEnabled)
-            counter.setDisplayLightEnabled(store.displayLightEnabled)
-            refreshSettings()
+            if (persistAction { store.setDisplayLightEnabled(!store.displayLightEnabled) }) {
+                counter.setDisplayLightEnabled(store.displayLightEnabled)
+                refreshSettings()
+            }
         }
-        header.addView(themeButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) })
-        header.addView(lightButton, LinearLayout.LayoutParams(dp(48), dp(48)))
-        infoColumn.addView(header, marginParams(-1, -2))
+        headerControls.addView(themeButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) })
+        headerControls.addView(lightButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+        topPanel.addView(AdaptiveRow(titleGroup, headerControls, equal = false, gap = dp(12)).apply {
+            tag = "counter_header"
+        }, marginParams(-1, -2))
 
         val topControls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         vibrationButton = iconButton("vibration", "Haptics", "vibration") {
-            store.setVibrationEnabled(!store.vibrationEnabled)
-            refreshSettings()
-            if (store.vibrationEnabled) counter.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            if (persistAction { store.setVibrationEnabled(!store.vibrationEnabled) }) {
+                refreshSettings()
+                if (store.vibrationEnabled) counter.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            }
         }
-        goalButton = iconButton("goal", "Target ${store.goal}", "goal") { showGoalDialog() }
+        goalButton = iconButton("goal", "Set target", "goal") { showGoalDialog() }
         val rename = iconButton("rename", "Rename", "rename") { showRenameDialog() }
         listOf(vibrationButton, goalButton, rename).forEach { button ->
             topControls.addView(FrameLayout(this).apply {
                 addView(button, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER))
             }, LinearLayout.LayoutParams(0, dp(48), 1f))
         }
-        infoColumn.addView(topControls, marginParams(-1, -2, top = 10))
-        if (!wide) content.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
-
+        topPanel.addView(topControls, marginParams(-1, -2, top = 10))
         counterNameLabel = label("", 14f, palette.muted).apply {
             tag = "counter_name_label"
             gravity = Gravity.CENTER
@@ -163,31 +152,37 @@ class MainActivity : Activity() {
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END
         }
-        infoColumn.addView(counterNameLabel, marginParams(-1, -2, top = 12))
+        topPanel.addView(counterNameLabel, marginParams(-1, -2, top = 12))
 
         counter = CounterView(this).apply {
             setDisplayLightEnabled(store.displayLightEnabled)
-            onIncrement = {
+            onIncrement = increment@ {
                 val previous = store.count
-                val updated = store.increment()
+                var updated = previous
+                if (!persistAction { updated = store.increment() }) return@increment
                 refreshCounter(true)
+                val reachedTarget = store.goal > 0 && updated != previous && updated == store.goal.toLong()
                 if (store.vibrationEnabled && updated != previous) {
-                    performHapticFeedback(if (updated == store.goal.toLong()) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.KEYBOARD_TAP)
+                    performHapticFeedback(if (reachedTarget) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.KEYBOARD_TAP)
                 }
-                if (updated != previous && updated == store.goal.toLong()) {
+                if (reachedTarget) {
                     announceForAccessibility("Target reached. Count $updated.")
                     Toast.makeText(this@MainActivity, "Target reached · ${numberFormat.format(updated)}", Toast.LENGTH_SHORT).show()
                 }
             }
             onReset = { showResetDialog() }
         }
-        counterColumn.addView(counter, marginParams(dp(deviceWidth), dp(deviceWidth * 418f / 360f), top = 6))
+        val heroPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            addView(counter, marginParams(dp(300), dp(300f * 418f / 360f), top = 6))
+        }
         countLabel = label("", 11f, palette.muted).apply {
             tag = "count_label"
             gravity = Gravity.CENTER
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_NONE
         }
-        counterColumn.addView(countLabel, marginParams(-1, -2, top = 4))
+        heroPanel.addView(countLabel, marginParams(-1, -2, top = 4))
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             tag = "progress"
             max = 1000
@@ -195,20 +190,35 @@ class MainActivity : Activity() {
             progressBackgroundTintList = ColorStateList.valueOf(palette.border)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        counterColumn.addView(progress, marginParams(-1, dp(3), top = 8))
-        if (!wide) content.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
-        val footer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        footer.addView(actionButton("save", "Save count") { showSaveDialog() }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginEnd = dp(10) })
-        footer.addView(actionButton("history", "Saved counts") { showHistoryDialog() }, LinearLayout.LayoutParams(0, dp(50), 1f))
-        infoColumn.addView(footer, marginParams(-1, -2, top = 12))
-        val privacyRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        privacyRow.addView(label("Saved on your device", 10f, palette.muted).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, -2, 1f))
+        heroPanel.addView(progress, marginParams(-1, dp(3), top = 8))
+
+        val bottomPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val save = actionButton("save", "Save count") { showSaveDialog() }
+        val history = actionButton("history", "Saved counts") { showHistoryDialog() }
+        bottomPanel.addView(AdaptiveRow(save, history, equal = true, gap = dp(10)).apply {
+            tag = "counter_footer"
+        }, marginParams(-1, -2))
+        val privacyLabel = label("Saved on your device", 10f, palette.muted).apply { gravity = Gravity.CENTER }
         adPrivacyButton = actionButton("ad_privacy", "Ad privacy") { bannerAds.showPrivacyOptions() }.apply {
             visibility = if (adPrivacyRequired) View.VISIBLE else View.GONE
         }
-        privacyRow.addView(adPrivacyButton, LinearLayout.LayoutParams(dp(104), dp(48)))
-        infoColumn.addView(privacyRow, marginParams(-1, -2, top = 6))
-        scroll.addView(content, FrameLayout.LayoutParams(-1, -2))
+        bottomPanel.addView(AdaptiveRow(privacyLabel, adPrivacyButton, equal = false, gap = dp(8)), marginParams(-1, -2, top = 6))
+
+        val content = AdaptiveContent(topPanel, heroPanel, bottomPanel).apply { tag = "adaptive_content" }
+        adaptiveContent = content
+        val scroll = object : ScrollView(this) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                content.setViewport(MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight,
+                    MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom)
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }.apply {
+            tag = "counter_scroll"
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            clipToPadding = false
+            addView(content, FrameLayout.LayoutParams(-1, -2))
+        }
         val bannerContainer = FrameLayout(this).apply { tag = "ad_banner_container" }
         val screen = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -216,19 +226,6 @@ class MainActivity : Activity() {
             addView(bannerContainer, LinearLayout.LayoutParams(-1, -2))
         }
         root.addView(screen, FrameLayout.LayoutParams(-1, -1))
-        resizeCounter = {
-            if (scroll.width > 0 && scroll.height > 0) {
-                val width = measureDeviceWidth(scroll.width / metrics.density, scroll.height / metrics.density)
-                val deviceParams = counter.layoutParams
-                if (deviceParams.width != dp(width) || deviceParams.height != dp(width * 418f / 360f)) {
-                    deviceParams.width = dp(width)
-                    deviceParams.height = dp(width * 418f / 360f)
-                    counter.layoutParams = deviceParams
-                    if (wide) counterColumn.layoutParams = counterColumn.layoutParams.apply { this.width = dp(width) }
-                }
-            }
-        }
-        scroll.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> resizeCounter?.invoke() }
         if (Build.VERSION.SDK_INT >= 35) {
             root.setOnApplyWindowInsetsListener { view, insets ->
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
@@ -248,13 +245,13 @@ class MainActivity : Activity() {
         vibrationButton.contentDescription = "Haptics ${if (store.vibrationEnabled) "on" else "off"}. Toggle haptics"
         vibrationButton.setCompoundDrawablesWithIntrinsicBounds(Glyph("vibration", if (store.vibrationEnabled) palette.accent else palette.muted, dp(21)), null, null, null)
         vibrationButton.background = circularButtonBackground(store.vibrationEnabled)
-        goalButton.contentDescription = "Change target. Current target ${store.goal}"
+        goalButton.contentDescription = if (store.goal > 0) "Change target. Current target ${store.goal}" else "Set an optional target. No target selected"
         lightButton.contentDescription = if (store.displayLightEnabled) "Turn display light off" else "Turn display light on"
         lightButton.setCompoundDrawablesWithIntrinsicBounds(Glyph("light", if (store.displayLightEnabled) palette.accent else palette.muted, dp(21)), null, null, null)
         lightButton.background = circularButtonBackground(store.displayLightEnabled)
         if (Build.VERSION.SDK_INT >= 26) {
             vibrationButton.tooltipText = "Haptics ${if (store.vibrationEnabled) "on" else "off"}"
-            goalButton.tooltipText = "Target ${numberFormat.format(store.goal)}"
+            goalButton.tooltipText = if (store.goal > 0) "Target ${numberFormat.format(store.goal)}" else "Set target"
             themeButton.tooltipText = themeButton.contentDescription
             lightButton.tooltipText = lightButton.contentDescription
         }
@@ -267,10 +264,16 @@ class MainActivity : Activity() {
 
     private fun refreshCounter(animate: Boolean) {
         counter.update(store.count, store.darkTheme)
-        countLabel.text = "${numberFormat.format(store.count)} total  ·  Target ${numberFormat.format(store.goal)}"
-        countLabel.contentDescription = "Count ${store.count}. Target ${store.goal}"
-        val nextProgress = (min(store.count.toDouble() / store.goal, 1.0) * 1000).toInt()
         progressAnimator?.cancel()
+        val hasTarget = store.goal > 0
+        countLabel.text = countSummary(store.count, store.goal)
+        countLabel.contentDescription = if (hasTarget) "Count ${store.count}. Target ${store.goal}" else "Count ${store.count}"
+        progress.visibility = if (hasTarget) View.VISIBLE else View.GONE
+        if (!hasTarget) {
+            progress.progress = 0
+            return
+        }
+        val nextProgress = (min(store.count.toDouble() / store.goal, 1.0) * 1000).toInt()
         val animationsEnabled = if (Build.VERSION.SDK_INT >= 26) ValueAnimator.areAnimatorsEnabled()
             else Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
         if (animate && animationsEnabled) {
@@ -283,7 +286,7 @@ class MainActivity : Activity() {
         showDialog(AlertDialog.Builder(dialogContext()).setTitle("Start a new count?")
             .setMessage("Your count of ${numberFormat.format(store.count)} will be reset. Saved counts will stay on this device.")
             .setNegativeButton("Keep counting", null)
-            .setPositiveButton("Reset") { _, _ -> store.reset(); refreshCounter(false) }.create())
+            .setPositiveButton("Reset") { _, _ -> if (persistAction { store.reset() }) refreshCounter(false) }.create())
     }
 
     private fun showSaveDialog() {
@@ -302,8 +305,9 @@ class MainActivity : Activity() {
         showDialog(AlertDialog.Builder(dialogContext()).setTitle("Save count").setView(box)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Save") { _, _ ->
-                store.saveSession(input.text.toString().trim().ifEmpty { store.counterName })
-                Toast.makeText(this, "Count saved", Toast.LENGTH_SHORT).show()
+                if (persistAction { store.saveSession(input.text.toString().trim().ifEmpty { store.counterName }) }) {
+                    Toast.makeText(this, "Count saved", Toast.LENGTH_SHORT).show()
+                }
             }.create())
     }
 
@@ -330,7 +334,7 @@ class MainActivity : Activity() {
                 setOnClickListener { dialog.dismiss(); showSessionDialog(session) }
             }
             row.addView(label(session.label, 16f, palette.foreground).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) })
-            row.addView(label("${numberFormat.format(session.count)} total · Target ${numberFormat.format(session.goal)}", 13f, palette.accent), marginParams(-1, -2, top = 5))
+            row.addView(label(countSummary(session.count, session.goal), 13f, palette.accent), marginParams(-1, -2, top = 5))
             row.addView(label(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(session.timestamp)), 11f, palette.muted), marginParams(-1, -2, top = 4))
             list.addView(row, marginParams(-1, -2, top = 9))
         }
@@ -339,29 +343,32 @@ class MainActivity : Activity() {
 
     private fun showSessionDialog(session: CounterStore.Session) {
         showDialog(AlertDialog.Builder(dialogContext()).setTitle(session.label)
-            .setMessage("${numberFormat.format(session.count)} total · Target ${numberFormat.format(session.goal)}\n\nRestore replaces the current count, name and target.")
+            .setMessage("${countSummary(session.count, session.goal)}\n\nRestore replaces the current counter with this saved count.")
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Delete") { _, _ ->
                 showDialog(AlertDialog.Builder(dialogContext()).setTitle("Delete saved count?").setMessage(session.label)
-                    .setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> store.deleteSession(session.id); showHistoryDialog() }.create())
+                    .setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ ->
+                        if (persistAction { store.deleteSession(session.id) }) showHistoryDialog()
+                    }.create())
             }
             .setPositiveButton("Restore") { _, _ ->
-                store.restoreSession(session.id)
-                refreshSettings(); refreshCounter(false); refreshCounterName()
-                Toast.makeText(this, "Saved count restored", Toast.LENGTH_SHORT).show()
+                if (persistAction { store.restoreSession(session.id) }) {
+                    refreshSettings(); refreshCounter(false); refreshCounterName()
+                    Toast.makeText(this, "Saved count restored", Toast.LENGTH_SHORT).show()
+                }
             }.create())
     }
 
     private fun showGoalDialog() {
         showDialog(AlertDialog.Builder(dialogContext()).setTitle("Choose your target")
-            .setItems(arrayOf("25", "50", "100", "Custom target")) { _, which ->
-                val presets = intArrayOf(25, 50, 100)
-                if (which < 3) setGoal(presets[which]) else showCustomGoal()
+            .setItems(arrayOf("No target", "25", "50", "100", "Custom target")) { _, which ->
+                val presets = intArrayOf(0, 25, 50, 100)
+                if (which < presets.size) setGoal(presets[which]) else showCustomGoal()
             }.setNegativeButton("Cancel", null).create())
     }
 
     private fun showCustomGoal() {
-        val input = input(store.goal.toString(), InputType.TYPE_CLASS_NUMBER).apply {
+        val input = input(if (store.goal > 0) store.goal.toString() else "", InputType.TYPE_CLASS_NUMBER).apply {
             tag = "custom_goal"
             filters = arrayOf(InputFilter.LengthFilter(9))
             selectAll()
@@ -373,14 +380,15 @@ class MainActivity : Activity() {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val value = input.text.toString().toIntOrNull()
             if (value == null || value !in 1..999999999) input.error = "Enter a number from 1 to 999,999,999"
-            else { setGoal(value); dialog.dismiss() }
+            else if (setGoal(value)) dialog.dismiss()
         }
     }
 
-    private fun setGoal(value: Int) {
-        store.setGoal(value)
+    private fun setGoal(value: Int): Boolean {
+        if (!persistAction { store.setGoal(value) }) return false
         refreshSettings()
         refreshCounter(false)
+        return true
     }
 
     private fun showRenameDialog() {
@@ -397,7 +405,7 @@ class MainActivity : Activity() {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val name = input.text.toString().trim()
             if (name.isEmpty()) input.error = "Enter a counter name"
-            else { store.setCounterName(name); refreshCounterName(); dialog.dismiss() }
+            else if (persistAction { store.setCounterName(name) }) { refreshCounterName(); dialog.dismiss() }
         }
     }
 
@@ -428,7 +436,9 @@ class MainActivity : Activity() {
         setTextColor(palette.foreground)
         minimumWidth = 0
         minWidth = 0
-        setPadding(dp(10), 0, dp(10), 0)
+        minimumHeight = dp(48)
+        minHeight = dp(48)
+        setPadding(dp(12), dp(10), dp(12), dp(10))
         background = buttonBackground(true)
         contentDescription = title
         setOnClickListener { action() }
@@ -484,6 +494,18 @@ class MainActivity : Activity() {
     private fun dp(value: Int) = dp(value.toFloat())
     private fun dp(value: Float) = (value * resources.displayMetrics.density + .5f).toInt()
 
+    private fun countSummary(count: Long, goal: Int): String = if (goal > 0) {
+        "${numberFormat.format(count)} total  ·  Target ${numberFormat.format(goal)}"
+    } else "${numberFormat.format(count)} total"
+
+    private fun persistAction(action: () -> Unit): Boolean = try {
+        action()
+        true
+    } catch (_: IllegalStateException) {
+        Toast.makeText(this, "Count could not be saved. Free device storage and try again.", Toast.LENGTH_LONG).show()
+        false
+    }
+
     override fun onPause() {
         counter.pauseAnimations()
         progressAnimator?.cancel()
@@ -493,13 +515,175 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (::store.isInitialized && ::counter.isInitialized) {
+            if (renderedDarkTheme != store.darkTheme) {
+                counter.pauseAnimations()
+                progressAnimator?.cancel()
+                renderScreen()
+            } else {
+                counter.setDisplayLightEnabled(store.displayLightEnabled)
+                refreshSettings()
+                refreshCounterName()
+                refreshCounter(false)
+            }
+        }
         if (::bannerAds.isInitialized) bannerAds.resume()
     }
 
     override fun onDestroy() {
-        resizeCounter = null
+        adaptiveContent = null
         if (::bannerAds.isInitialized) bannerAds.destroy()
         super.onDestroy()
+    }
+
+    /** Reflows native text instead of forcing labels into fixed-height buttons. */
+    private inner class AdaptiveRow(
+        private val first: View,
+        private val second: View,
+        private val equal: Boolean,
+        private val gap: Int,
+    ) : LinearLayout(this@MainActivity) {
+        init {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(first)
+            addView(second)
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val available = View.MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+            fun naturalWidth(view: View): Int {
+                if (view.visibility == View.GONE) return 0
+                if (view is Button) return ceil(view.paint.measureText(view.text.toString())).toInt() + view.paddingLeft + view.paddingRight + dp(8)
+                view.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                return view.measuredWidth
+            }
+            val firstWidth = naturalWidth(first)
+            val secondWidth = naturalWidth(second)
+            val secondVisible = second.visibility != View.GONE
+            val needed = if (equal) max(firstWidth, secondWidth) * 2 + gap else firstWidth + secondWidth + gap
+            val stacked = secondVisible && needed > available
+            val wantedOrientation = if (stacked) VERTICAL else HORIZONTAL
+            if (orientation != wantedOrientation) orientation = wantedOrientation
+            fun params(view: View, index: Int) {
+                val wanted = LayoutParams(
+                    if (stacked) { if (index == 0 || equal) -1 else -2 }
+                    else if (equal || index == 0 && secondVisible) 0 else if (index == 0) -1 else -2,
+                    -2,
+                    if (!stacked && secondVisible && (equal || index == 0)) 1f else 0f,
+                ).apply {
+                    if (index == 1 && secondVisible) {
+                        if (stacked) topMargin = gap else marginStart = gap
+                    }
+                    gravity = if (stacked && index == 1 && !equal) Gravity.END else Gravity.CENTER_VERTICAL
+                }
+                val current = view.layoutParams as? LayoutParams
+                if (current == null || current.width != wanted.width || current.height != wanted.height || current.weight != wanted.weight ||
+                    current.topMargin != wanted.topMargin || current.marginStart != wanted.marginStart || current.gravity != wanted.gravity) {
+                    view.layoutParams = wanted
+                }
+            }
+            params(first, 0)
+            params(second, 1)
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        }
+    }
+
+    /** Uses the inset-adjusted scroll viewport; size changes never recreate app state. */
+    private inner class AdaptiveContent(
+        private val topPanel: View,
+        private val heroPanel: View,
+        private val bottomPanel: View,
+    ) : ViewGroup(this@MainActivity) {
+        private var viewportWidth = 0
+        private var viewportHeight = 0
+        private val topBounds = Rect()
+        private val heroBounds = Rect()
+        private val bottomBounds = Rect()
+
+        init {
+            addView(topPanel)
+            addView(heroPanel)
+            addView(bottomPanel)
+        }
+
+        fun setViewport(width: Int, height: Int) {
+            val nextWidth = width.coerceAtLeast(0)
+            val nextHeight = height.coerceAtLeast(0)
+            if (nextWidth != viewportWidth || nextHeight != viewportHeight) {
+                viewportWidth = nextWidth
+                viewportHeight = nextHeight
+                // ScrollView can reuse its child's unspecified-height measure spec.
+                // Mark this measure dirty without scheduling another parent traversal.
+                forceLayout()
+            }
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val width = if (View.MeasureSpec.getMode(widthMeasureSpec) == View.MeasureSpec.UNSPECIFIED) viewportWidth
+                else View.MeasureSpec.getSize(widthMeasureSpec)
+            val horizontalPadding = min(dp(12), ((width - dp(190)) / 2).coerceAtLeast(0))
+            val verticalPadding = dp(12)
+            val availableWidth = (width - 2 * horizontalPadding).coerceAtLeast(1)
+            val availableHeight = (viewportHeight - 2 * verticalPadding).coerceAtLeast(0)
+            val wide = availableWidth >= dp(680)
+            val gap = dp(12)
+            val columnGap = dp(20)
+            val infoWidth = if (wide) min(dp(420), max(dp(250), (availableWidth * .42f).toInt())) else availableWidth
+            val heroWidthLimit = if (wide) availableWidth - infoWidth - columnGap else availableWidth
+            fun measurePanel(view: View, panelWidth: Int) {
+                view.forceLayout()
+                view.measure(View.MeasureSpec.makeMeasureSpec(panelWidth, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            }
+            measurePanel(topPanel, infoWidth)
+            measurePanel(bottomPanel, infoWidth)
+            val heroBudget = if (wide) availableHeight else availableHeight - topPanel.measuredHeight - bottomPanel.measuredHeight - 2 * gap
+            val preferredHeroWidth = min(heroWidthLimit, dp(440)).coerceAtLeast(1)
+            val minimumHeroWidth = min(dp(190), preferredHeroWidth)
+            var heroWidth = preferredHeroWidth
+            fun measureHero() {
+                counter.layoutParams.width = heroWidth
+                counter.layoutParams.height = (heroWidth * 418f / 360f).toInt()
+                counter.forceLayout()
+                measurePanel(heroPanel, heroWidth)
+            }
+            measureHero()
+            for (pass in 0 until 2) {
+                val chromeHeight = heroPanel.measuredHeight - counter.measuredHeight
+                val fittedWidth = ((heroBudget - chromeHeight).coerceAtLeast(0) * 360f / 418f).toInt()
+                val nextWidth = min(preferredHeroWidth, max(minimumHeroWidth, fittedWidth))
+                if (nextWidth == heroWidth) break
+                heroWidth = nextWidth
+                measureHero()
+            }
+            val neededHeight = if (wide) max(topPanel.measuredHeight + gap + bottomPanel.measuredHeight, heroPanel.measuredHeight)
+                else topPanel.measuredHeight + heroPanel.measuredHeight + bottomPanel.measuredHeight + 2 * gap
+            val height = max(viewportHeight, neededHeight + 2 * verticalPadding)
+            setMeasuredDimension(View.resolveSize(width, widthMeasureSpec), View.resolveSize(height, heightMeasureSpec))
+            val usableHeight = measuredHeight - 2 * verticalPadding
+            if (wide) {
+                val infoHeight = topPanel.measuredHeight + gap + bottomPanel.measuredHeight
+                val infoTop = verticalPadding + max(0, (usableHeight - infoHeight) / 2)
+                topBounds.set(horizontalPadding, infoTop, horizontalPadding + infoWidth, infoTop + topPanel.measuredHeight)
+                bottomBounds.set(horizontalPadding, topBounds.bottom + gap, horizontalPadding + infoWidth, topBounds.bottom + gap + bottomPanel.measuredHeight)
+                val heroLeft = horizontalPadding + infoWidth + columnGap + (heroWidthLimit - heroWidth) / 2
+                val heroTop = verticalPadding + max(0, (usableHeight - heroPanel.measuredHeight) / 2)
+                heroBounds.set(heroLeft, heroTop, heroLeft + heroWidth, heroTop + heroPanel.measuredHeight)
+            } else {
+                topBounds.set(horizontalPadding, verticalPadding, horizontalPadding + infoWidth, verticalPadding + topPanel.measuredHeight)
+                val bottomTop = measuredHeight - verticalPadding - bottomPanel.measuredHeight
+                bottomBounds.set(horizontalPadding, bottomTop, horizontalPadding + infoWidth, bottomTop + bottomPanel.measuredHeight)
+                val heroTop = topBounds.bottom + gap + max(0, (bottomTop - gap - topBounds.bottom - gap - heroPanel.measuredHeight) / 2)
+                val heroLeft = (width - heroWidth) / 2
+                heroBounds.set(heroLeft, heroTop, heroLeft + heroWidth, heroTop + heroPanel.measuredHeight)
+            }
+        }
+
+        override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+            topPanel.layout(topBounds.left, topBounds.top, topBounds.right, topBounds.bottom)
+            heroPanel.layout(heroBounds.left, heroBounds.top, heroBounds.right, heroBounds.bottom)
+            bottomPanel.layout(bottomBounds.left, bottomBounds.top, bottomBounds.right, bottomBounds.bottom)
+        }
     }
 
     private class Palette(dark: Boolean) {

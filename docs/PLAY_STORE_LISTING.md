@@ -10,26 +10,28 @@ A simple tasbih and zikr counter with saved counts, custom targets and themes.
 
 ## Full description
 
-Tasbih Counter - Zikr is a simple, free counter for tasbih, zikr and everyday counting. Tap the large silver button to add one, read your total on the green digital display and follow your progress toward a target. Save counts to continue later.
+Tasbih Counter - Zikr is a simple, free counter for tasbih, zikr and everyday counting. Tap the large silver button to add one and read your total on the green digital display. Your current count saves automatically, so you can close the app and continue when you reopen it.
 
-Start with a clean counter named Counter, then give it any name you choose. The app leaves the words and purpose of your count to you. Compact controls keep haptics, target, counter name, theme and display light within reach.
+Start with a clean counter named Counter and no target. Give it any name you choose, and set a target only if you want one. You can turn the target off again. The app leaves the words and purpose of your count to you. Compact controls keep haptics, target, counter name, theme and display light within reach.
 
 Features:
 
 - A physical counter design with a green display and silver buttons.
 - A gentle button press and release, with a brief display glow after counting.
-- Targets of 25, 50 or 100, plus your own custom target.
+- Optional targets of 25, 50 or 100, your own custom number, or target off.
 - An editable counter name.
-- Saved counts you can restore or delete.
+- Saved snapshots you can restore or delete.
 - A confirmation before resetting your current count.
 - Light and dark themes.
 - A display light you can switch on or off.
 - Optional vibration feedback.
 - Reduced-motion support through Android's animation setting.
-- Your current count and settings stay saved after closing the app.
-- A layout that adapts to portrait, landscape and shorter screens.
+- Your current count and settings save automatically; the Save count button creates a separate snapshot.
+- A layout that adapts to window size and text size, with scrolling when needed.
 
 Counting and saved counts work offline without an account. Your counter names, totals and saved counts stay on your device and are not passed to the advertising SDK. The app includes a banner advertisement at the bottom. Ads and consent messages require internet access. There are no in-app purchases or subscriptions.
+
+Existing counts and target settings are kept when upgrading. Uninstalling the app or clearing its data removes local counter data.
 
 Built for Android 6.0 and newer, with a compact native interface for straightforward counting.
 
