@@ -2,6 +2,7 @@ package com.awser.counter
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Looper
 import android.view.Gravity
@@ -246,24 +247,38 @@ class BannerControllerRegressionTest {
         assertEquals("", ads.status.message)
     }
 
-    @Test fun litePlayServicesFailureIsReportedAndRecoverableWithoutStartingSdkEarly() {
-        sdk.availability = 1 // Google's SERVICE_MISSING.
+    @Test fun absentGooglePlayPackageDoesNotBlockAuthorizedForegroundAdsOrBypassConsent() {
+        @Suppress("DEPRECATION")
+        assertThrows(PackageManager.NameNotFoundException::class.java) {
+            activity.packageManager.getPackageInfo("com.google.android.gms", 0)
+        }
         ads.resume()
-        sdk.canRequestAds = true
         sdk.consentSucceeded()
         sdk.consentFormCompleted(null)
-        assertEquals(0, sdk.initializations)
+        assertFalse(sdk.canRequestAds)
+        assertEquals("The full SDK still requires privacy authorization", 0, sdk.initializations)
         assertEquals(0, sdk.banners.size)
-        assertTrue(ads.status.message.contains("Google Play services"))
-        assertTrue(ads.status.canRetry)
-        sdk.availability = 0
+        assertTrue(ads.status.message.contains("privacy choices"))
+
+        sdk.canRequestAds = true
         elapsed += 60_000
         ads.retry()
-        assertEquals(1, sdk.initializations)
-        assertEquals(1, sdk.refreshes)
+        assertEquals(2, sdk.refreshes)
+        sdk.consentSucceeded()
+        ads.pause()
+        sdk.consentFormCompleted(null)
+        assertEquals("Missing Google Play cannot bypass the foreground gate", 0, sdk.initializations)
+        ads.resume()
+        assertEquals("The full SDK can initialize without the Google Play package", 1, sdk.initializations)
+        ads.pause()
         sdk.initialized()
         pump()
+        assertEquals("A paused initialization callback must not load an ad", 0, sdk.banners.size)
+        ads.resume()
+        assertEquals("Resuming must not initialize the SDK again", 1, sdk.initializations)
         assertEquals(1, sdk.banners.size)
+        sdk.banners.single().loaded()
+        assertEquals("", ads.status.message)
     }
 
     @Test fun retainedValidConsentCanRecoverAnOfflineRefreshWithoutBypassingTheGate() {
@@ -342,7 +357,6 @@ class BannerControllerRegressionTest {
 private class OfflineBannerSdk(private val activity: Activity) : BannerAdSdk {
     override var canRequestAds = false
     override var privacyOptionsRequired = false
-    var availability = 0
     var refreshes = 0
     var consentForms = 0
     var initializations = 0
@@ -358,7 +372,6 @@ private class OfflineBannerSdk(private val activity: Activity) : BannerAdSdk {
     }
     override fun showConsentForm(complete: (BannerAdStatus?) -> Unit) { consentForms++; consentFormCompleted = complete }
     override fun showPrivacyForm(complete: (BannerAdStatus?) -> Unit) { consentFormCompleted = complete }
-    override fun playServicesAvailability() = availability
     override fun initialize(complete: () -> Unit) { initializations++; initialized = complete }
     override fun createBanner(widthDp: Int): BannerAdHandle = OfflineBannerHandle(activity).also { banners += it }
 }

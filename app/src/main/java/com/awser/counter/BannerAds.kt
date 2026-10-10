@@ -12,8 +12,6 @@ import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailabilityLight
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.FormError
@@ -99,7 +97,6 @@ internal interface BannerAdSdk {
     fun refreshConsent(success: () -> Unit, failure: (BannerAdStatus) -> Unit)
     fun showConsentForm(complete: (BannerAdStatus?) -> Unit)
     fun showPrivacyForm(complete: (BannerAdStatus?) -> Unit)
-    fun playServicesAvailability(): Int
     fun initialize(complete: () -> Unit)
     fun createBanner(widthDp: Int): BannerAdHandle
 }
@@ -131,7 +128,6 @@ private class GoogleBannerSdk(private val activity: Activity) : BannerAdSdk {
             complete(it?.let { error -> consentFailureStatus(error.errorCode, error.message) })
         }
     }
-    override fun playServicesAvailability() = GoogleApiAvailabilityLight.getInstance().isGooglePlayServicesAvailable(activity)
     override fun initialize(complete: () -> Unit) { MobileAds.initialize(activity.applicationContext) { complete() } }
     override fun createBanner(widthDp: Int): BannerAdHandle {
         val banner = AdView(activity).apply {
@@ -308,22 +304,8 @@ internal class GoogleBannerAds(
             return
         }
         if (initializationStarted) return
-        val availability = try {
-            sdk.playServicesAvailability()
-        } catch (error: RuntimeException) {
-            fail(RetryStage.INITIALIZE, BannerAdStatus("Ad service unavailable right now.", exceptionDetail(error), true))
-            return
-        }
-        if (availability != ConnectionResult.SUCCESS) {
-            val message = when (availability) {
-                ConnectionResult.SERVICE_VERSION_UPDATE_REQUIRED -> "Update Google Play services to show ads."
-                ConnectionResult.SERVICE_DISABLED -> "Enable Google Play services to show ads."
-                ConnectionResult.SERVICE_UPDATING -> "Google Play services is updating."
-                else -> "Google Play services is needed to show ads."
-            }
-            fail(RetryStage.INITIALIZE, BannerAdStatus(message, "Google Play services availability: $availability. The small Ads Lite SDK needs working, updated Google Play services.", true))
-            return
-        }
+        // The full Ads SDK selects its bundled implementation when Play services are absent.
+        // Consent and foreground checks still apply; SDK callbacks report actual failures.
         initializationStarted = true
         publish(BannerAdStatus("Starting ads…"))
         executeInitialization {

@@ -19,6 +19,22 @@ require(releaseAdMobBannerId.matches(Regex("ca-app-pub-$adMobPublisher/[0-9]{10}
     "ADMOB_BANNER_ID must be a valid banner unit ID for publisher $adMobPublisher; banner IDs use /."
 }
 
+// Release credentials are supplied only by the build environment, never checked in.
+val releaseSigningNames = listOf(
+    "ANDROID_RELEASE_STORE_FILE", "ANDROID_RELEASE_STORE_PASSWORD",
+    "ANDROID_RELEASE_KEY_ALIAS", "ANDROID_RELEASE_KEY_PASSWORD",
+)
+val releaseSigningValues = releaseSigningNames.associateWith { providers.environmentVariable(it).orNull }
+val releaseSigningRequested = releaseSigningValues.values.any { it != null }
+require(!releaseSigningRequested || releaseSigningValues.values.all { !it.isNullOrBlank() }) {
+    "Release signing requires all four ANDROID_RELEASE_STORE_FILE, ANDROID_RELEASE_STORE_PASSWORD, ANDROID_RELEASE_KEY_ALIAS and ANDROID_RELEASE_KEY_PASSWORD environment variables."
+}
+val releaseStoreFile = if (releaseSigningRequested) {
+    rootProject.file(releaseSigningValues.getValue("ANDROID_RELEASE_STORE_FILE")!!.trim()).also {
+        require(it.isFile && it.canRead()) { "ANDROID_RELEASE_STORE_FILE must point to a readable keystore file." }
+    }
+} else null
+
 android {
     namespace = "com.awser.counter"
     compileSdk = 36
@@ -29,16 +45,25 @@ android {
         applicationId = "com.awser.counter"
         minSdk = 23
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.7.0"
+        versionCode = 11
+        versionName = "1.8.0"
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         manifestPlaceholders["adMobAppId"] = testAdMobAppId
         buildConfigField("String", "ADMOB_BANNER_ID", "\"$testAdMobBannerId\"")
         buildConfigField("boolean", "ADMOB_TEST_ADS", "true")
     }
     buildFeatures { buildConfig = true }
+    if (releaseSigningRequested) {
+        signingConfigs.create("releaseFromEnvironment") {
+            storeFile = releaseStoreFile
+            storePassword = releaseSigningValues.getValue("ANDROID_RELEASE_STORE_PASSWORD")
+            keyAlias = releaseSigningValues.getValue("ANDROID_RELEASE_KEY_ALIAS")!!.trim()
+            keyPassword = releaseSigningValues.getValue("ANDROID_RELEASE_KEY_PASSWORD")
+        }
+    }
     buildTypes {
         getByName("release") {
+            if (releaseSigningRequested) signingConfig = signingConfigs.getByName("releaseFromEnvironment")
             isMinifyEnabled = true
             isShrinkResources = true
             manifestPlaceholders["adMobAppId"] = releaseAdMobAppId
@@ -75,7 +100,8 @@ kotlin {
     compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 dependencies {
-    implementation("com.google.android.gms:play-services-ads-lite:25.0.0")
+    // Includes a local Ads implementation for Android/Fire devices without Play services.
+    implementation("com.google.android.gms:play-services-ads:25.0.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")

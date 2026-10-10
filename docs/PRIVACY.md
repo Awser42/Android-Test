@@ -10,7 +10,7 @@ A fresh install has no target until you choose one, and you can turn the target 
 
 ## Permissions
 
-The app uses Android's `VIBRATE` permission for optional vibration feedback. You can turn off haptics in the app. Internet and network access support advertisements and consent messages. The advertising SDK also declares permissions for advertising identifiers, Android AdServices and wake locks. Google Mobile Ads uses advertising features according to consent, device settings and its SDK configuration. The app does not request location, contacts, microphone, camera or shared-storage access.
+The app uses Android's `VIBRATE` permission for optional vibration feedback. You can turn off haptics in the app. Internet and network access support advertisements and consent messages. The full advertising SDK and its dependencies also declare permissions for advertising identifiers, Android AdServices, wake locks and foreground-service support. The merged app manifest includes a signature-protected internal receiver permission, `com.awser.counter.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. Google Mobile Ads uses advertising features according to consent, device settings and its SDK configuration. The app does not request location, contacts, microphone, camera or shared-storage access.
 
 ## Advertising and analytics
 
@@ -22,7 +22,7 @@ The app uses Google's User Messaging Platform to refresh consent status and show
 
 ## Distribution and testing
 
-Downloading APKs and running tests through GitHub uses GitHub's services and is covered by GitHub's own privacy practices. Installing and using the app does not require GitHub access.
+Downloading APKs and running tests through GitHub uses GitHub's services and is covered by GitHub's own privacy practices. If the app is distributed through Amazon Appstore, store downloads use Amazon's services and privacy terms. The app's counter does not require a GitHub, Amazon or Google account.
 
 The main public APK uses the owner's production AdMob identifiers. The separate preview and debug builds use Google's test identifiers. Both use the advertising and consent SDKs described above; using a test ad unit does not mean those SDKs have no data processing.
 
