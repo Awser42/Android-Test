@@ -48,7 +48,7 @@ Allow installation from the browser or file manager you use to open the preview 
 
 Debug and preview builds always use Google's official test application and banner IDs. The release build uses the configured production AdMob IDs. Use the preview or debug APK when testing advertisements. The Lite advertising SDK needs Google Play services; if ads cannot load, the banner slot closes and counting remains available. See [AdMob setup](docs/ADMOB_SETUP.md) for the SDK configuration and consent flow.
 
-The workflow runs unit tests, Android lint and Android 15 emulator tests, including guarded checks that force-stop and reopen the app, then reinstall the same APK to check count persistence. Test reports and rendered app screenshots are downloadable artifacts. Open **Actions → Android** and inspect the latest push's status and reports for the current version's results; the new device checks await remote execution. It uses standard `ubuntu-latest` GitHub-hosted runners, which GitHub currently provides free for public repositories. This is automated testing; GitHub Actions does not provide a phone screen you can interact with in your browser.
+GitHub [run 38079687756](https://github.com/Awser42/Android-Test/actions/runs/38079687756) passed both the build and Android 15/API 35 emulator jobs for app-code commit [f240090](https://github.com/Awser42/Android-Test/commit/f24009024d38dd951cc7588bdaa1412112b1c141). Offline force-stop, fresh-process relaunch and same-APK reinstall checks passed on CI. Test reports and rendered screenshots are downloadable artifacts; open **Actions → Android** for subsequent pushes' results. The workflow uses standard `ubuntu-latest` GitHub-hosted runners, which GitHub currently provides free for public repositories. This is automated testing; GitHub Actions does not provide a phone screen you can interact with in your browser.
 
 ### Roman Urdu mein
 
@@ -92,7 +92,7 @@ HTML reports appear under `app/build/reports/tests/`, `app/build/reports/android
 
 ## Build validation
 
-Version 1.4.0 (version code 7) passed all 52 JVM tests: 17 storage, 14 Activity, 15 native screenshot, four counter graphics and two banner tests. No tests failed, errored or were skipped. Android lint reported zero errors and seven warnings. Debug, optimized preview, unsigned release and instrumentation APKs, plus the unsigned release app bundle, compiled successfully. The optimized test-signed preview APK is 405,996 bytes (396.5 KiB). Device/emulator testing and real ad serving have not been verified locally; the GitHub Actions workflow prepares an Android 15/API 35 emulator for device tests. The new remote force-stop, restart and same-APK reinstall checks are pending execution.
+Version 1.4.0 (version code 7) passed all 52 JVM tests: 17 storage, 14 Activity, 15 native screenshot, four counter graphics and two banner tests. No tests failed, errored or were skipped. Android lint reported zero errors and seven warnings. Debug, optimized preview, unsigned release and instrumentation APKs, plus the unsigned release app bundle, compiled successfully. The optimized test-signed preview APK is 405,996 bytes (396.5 KiB). The linked GitHub run passed API 35 instrumentation and offline process-restart/reinstall checks. Local KVM/device testing was unavailable, and real ad serving remains unverified.
 
 ## Play Store listing draft
 
