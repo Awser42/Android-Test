@@ -5,7 +5,6 @@ import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
@@ -125,7 +124,11 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }, marginParams(-1, -2))
         titleGroup.addView(label("Z I K R", 9f, palette.accent), marginParams(-1, -2, top = 4))
-        val headerControls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val header = LinearLayout(this).apply {
+            tag = "counter_header"
+            orientation = LinearLayout.VERTICAL
+            addView(titleGroup, marginParams(-1, -2))
+        }
         themeButton = iconButton("theme", "Theme", "theme") {
             if (persistAction { store.setDarkTheme(!store.darkTheme) }) {
                 counter.pauseAnimations()
@@ -142,14 +145,8 @@ class MainActivity : Activity() {
             }
         }
         colorThemeButton = iconButton("theme_colors", "Theme colors", "palette") { showColorThemeDialog() }
-        headerControls.addView(themeButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) })
-        headerControls.addView(lightButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) })
-        headerControls.addView(colorThemeButton, LinearLayout.LayoutParams(dp(48), dp(48)))
-        topPanel.addView(AdaptiveRow(titleGroup, headerControls, equal = false, gap = dp(12)).apply {
-            tag = "counter_header"
-        }, marginParams(-1, -2))
-
-        val topControls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        header.addView(headerControlsRow("header_appearance_controls", listOf(themeButton, lightButton, colorThemeButton)),
+            marginParams(-1, -2, top = 12))
         vibrationButton = iconButton("vibration", "Haptics", "vibration") {
             if (persistAction { store.setVibrationEnabled(!store.vibrationEnabled) }) {
                 refreshSettings()
@@ -158,12 +155,9 @@ class MainActivity : Activity() {
         }
         goalButton = iconButton("goal", "Set target", "goal") { showGoalDialog() }
         val rename = iconButton("rename", "Rename", "rename") { showRenameDialog() }
-        listOf(vibrationButton, goalButton, rename).forEach { button ->
-            topControls.addView(FrameLayout(this).apply {
-                addView(button, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER))
-            }, LinearLayout.LayoutParams(0, dp(48), 1f))
-        }
-        topPanel.addView(topControls, marginParams(-1, -2, top = 10))
+        header.addView(headerControlsRow("header_counter_controls", listOf(vibrationButton, goalButton, rename)),
+            marginParams(-1, -2, top = 10))
+        topPanel.addView(header, marginParams(-1, -2))
         counterNameLabel = label("", 14f, palette.muted).apply {
             tag = "counter_name_label"
             gravity = Gravity.CENTER
@@ -171,11 +165,7 @@ class MainActivity : Activity() {
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END
         }
-        val quranButton = actionButton("quran", "Quran") {
-            startActivity(Intent(this, QuranActivity::class.java))
-        }.apply { contentDescription = "Open Quran. Read Yaseen, Ayat-e-Karima and Ayatul Kursi without ads" }
-        topPanel.addView(AdaptiveRow(counterNameLabel, quranButton, equal = false, gap = dp(12)),
-            marginParams(-1, -2, top = 12))
+        topPanel.addView(counterNameLabel, marginParams(-1, -2, top = 12))
 
         counter = CounterView(this).apply {
             setColorTheme(colorTheme)
@@ -295,11 +285,11 @@ class MainActivity : Activity() {
 
     private fun refreshSettings() {
         vibrationButton.contentDescription = "Haptics ${if (store.vibrationEnabled) "on" else "off"}. Toggle haptics"
-        vibrationButton.setCompoundDrawablesWithIntrinsicBounds(Glyph("vibration", if (store.vibrationEnabled) palette.accent else palette.muted, dp(21)), null, null, null)
+        vibrationButton.foreground = Glyph("vibration", if (store.vibrationEnabled) palette.accent else palette.muted, dp(21))
         vibrationButton.background = circularButtonBackground(store.vibrationEnabled)
         goalButton.contentDescription = if (store.goal > 0) "Change target. Current target ${store.goal}" else "Set an optional target. No target selected"
         lightButton.contentDescription = if (store.displayLightEnabled) "Turn display light off" else "Turn display light on"
-        lightButton.setCompoundDrawablesWithIntrinsicBounds(Glyph("light", if (store.displayLightEnabled) palette.accent else palette.muted, dp(21)), null, null, null)
+        lightButton.foreground = Glyph("light", if (store.displayLightEnabled) palette.accent else palette.muted, dp(21))
         lightButton.background = circularButtonBackground(store.displayLightEnabled)
         colorThemeButton.contentDescription = "Theme colors. ${CounterThemes.resolve(store.colorThemeId).name} selected"
         colorThemeButton.background = circularButtonBackground(true)
@@ -531,16 +521,28 @@ class MainActivity : Activity() {
         isAllCaps = false
         gravity = Gravity.CENTER
         contentDescription = title
-        minimumWidth = 0
-        minWidth = 0
-        minimumHeight = 0
-        minHeight = 0
-        setPadding(dp(12), 0, dp(12), 0)
-        setCompoundDrawablesWithIntrinsicBounds(Glyph(icon, palette.accent, dp(21)), null, null, null)
+        setPadding(0, 0, 0, 0)
+        foreground = Glyph(icon, palette.accent, dp(21))
+        foregroundGravity = Gravity.CENTER
         compoundDrawablePadding = 0
         background = circularButtonBackground(false)
+        minimumWidth = dp(48)
+        minWidth = dp(48)
+        minimumHeight = dp(48)
+        minHeight = dp(48)
         if (Build.VERSION.SDK_INT >= 26) tooltipText = title
         setOnClickListener { action() }
+    }
+
+    private fun headerControlsRow(viewTag: String, buttons: List<Button>): LinearLayout = LinearLayout(this).apply {
+        tag = viewTag
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        buttons.forEach { button ->
+            addView(FrameLayout(this@MainActivity).apply {
+                addView(button, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER))
+            }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        }
     }
 
     private fun actionButton(viewTag: String, title: String, action: () -> Unit): Button = Button(this).apply {

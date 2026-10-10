@@ -29,8 +29,8 @@ android {
         applicationId = "com.awser.counter"
         minSdk = 23
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.6.0"
+        versionCode = 10
+        versionName = "1.7.0"
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         manifestPlaceholders["adMobAppId"] = testAdMobAppId
         buildConfigField("String", "ADMOB_BANNER_ID", "\"$testAdMobBannerId\"")

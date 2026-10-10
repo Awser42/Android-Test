@@ -1,6 +1,6 @@
 # AdMob banner setup
 
-The main counter displays one anchored adaptive banner in a dedicated footer below the controls. The banner does not cover the counting button. Counting, names, targets and saved counts continue to work without an internet connection. The separate Quran reader uses bundled text offline, displays no ads and creates no advertising controller or AdView.
+The counter displays one anchored adaptive banner in a dedicated footer below the controls. The banner does not cover the counting button. Counting, names, targets and saved counts continue to work without an internet connection.
 
 ## IDs and build variants
 
@@ -18,7 +18,7 @@ App IDs use `~`; ad unit IDs use `/`. An app ID cannot be derived from an ad uni
 | `live` | Owner's app ID | Owner's banner unit |
 | `release` | Owner's app ID | Owner's banner unit |
 
-Debug and preview always use `ca-app-pub-3940256099942544~3347511713` and `ca-app-pub-3940256099942544/9214589741`, with `ADMOB_TEST_ADS=true`. They never request the owner's live ad unit. Live and release use the owner's production IDs with `ADMOB_TEST_ADS=false`. Use the optimized preview APK for repeated ad-interaction testing. Do not click your own live ads to test revenue or serving.
+Debug and preview always use `ca-app-pub-3940256099942544~3347511713` and `ca-app-pub-3940256099942544/9214589741`, with `ADMOB_TEST_ADS=true`. They never request the owner's live ad unit. Live and release use the owner's production IDs with `ADMOB_TEST_ADS=false`; they never substitute sample IDs or a fake banner when a live ad is unavailable. Use the optimized preview APK for repeated ad-interaction testing. Do not click your own live ads to test revenue or serving.
 
 Live and release default to the supplied production IDs. Optional Gradle properties or environment variables named `ADMOB_APP_ID` and `ADMOB_BANNER_ID` can override them. Overrides must have the correct separators and match the owner's publisher account; malformed or mismatched values cause a clear Gradle configuration error.
 
@@ -49,19 +49,21 @@ Lite loads ad implementation from Google Play services. A device without suitabl
 
 ## Consent and privacy options
 
-The main counter refreshes consent information through Google's User Messaging Platform when it becomes visible. If a consent form is required, UMP presents it. Ads initialize and load only when `canRequestAds()` permits requests; a failed consent refresh can reuse valid consent retained from an earlier session. The counter exposes status and a manual **Retry** action for recoverable failures, including a fresh consent refresh when needed. There is no app account or Google login flow. The Quran Activity does not initialize or request ads.
+The counter refreshes consent information through Google's User Messaging Platform when it becomes visible. If a consent form is required, UMP presents it. Ads initialize and load only when `canRequestAds()` permits requests; a failed consent refresh can reuse valid consent retained from an earlier session. The counter exposes status and a manual **Retry** action for recoverable failures, including a fresh consent refresh when needed. There is no app account or Google login flow.
 
 When UMP marks privacy options as required, the app exposes **Ad privacy** to reopen the choices. The banner is cleared while choices are changed, and requests are gated again afterward. Configure the appropriate privacy messages under AdMob's **Privacy & messaging** for the production app and review the audience, regions and disclosures that apply to your distribution.
 
-The SDK's manifest components and permissions remain intact, including its process-wide initialization provider. The SDK adds network and advertising-related permissions; see the app's [privacy policy](PRIVACY.md) and the merged production manifest. Explicit SDK initialization and ad loading are controlled by the counter's consent gate. Google's documented SDK data practices still apply to the app; the separate Quran reader creates no advertising controller or ad requests.
+The SDK's manifest components and permissions remain intact, including its process-wide initialization provider. The SDK adds network and advertising-related permissions; see the app's [privacy policy](PRIVACY.md) and the merged production manifest. Explicit SDK initialization and ad loading are controlled by the counter's consent gate. Google's documented SDK data practices apply to the app.
 
 ## Testing and lifecycle
 
 `BannerAds.factory` lets tests inject a fake controller. Robolectric defaults to a no-op controller so JVM/screenshot tests do not initialize Mobile Ads or make ad/consent network requests. Test fixture banners in screenshots represent layout, not proof that a real ad was served.
 
-The live controller calculates adaptive size from the actual footer width, replaces the banner after width/orientation changes and pauses/resumes/destroys the AdView with its Activity. Theme changes reparent the existing loaded or pending banner rather than requesting another ad at the same width. New consent forms, initialization and ad loads wait while the counter is paused, including while the separate Quran reader is open. Initialization happens in a background thread; view manipulation happens on the main thread.
+The live controller calculates adaptive size from the actual footer width, replaces the banner after width/orientation changes and pauses/resumes/destroys the AdView with its Activity. Theme changes reparent the existing loaded or pending banner rather than requesting another ad at the same width. New consent forms, initialization and ad loads wait while the counter is paused. Initialization happens in a background thread; view manipulation happens on the main thread.
 
-Following Google's sample, the controller attaches the AdView before requesting an ad. It remains invisible while loading, then becomes visible on success. Failure status covers consent refresh, network/ad-load errors, no fill and missing suitable Google Play services. The counter remains usable. Manual **Retry** waits 60 seconds after a failure and shows the remaining delay; it does not reload an already loaded ad. Retry does not activate or approve an AdMob account/app, fix an invalid unit or force ad inventory to be available. There is no automatic background or resume retry loop after a failure. Actual serving and the new retry/device checks remain unverified until their respective checks complete.
+Following Google's sample, the controller attaches the AdView before requesting an ad. It remains invisible while loading, then becomes visible on success. Failure status covers consent refresh, network/ad-load errors, no fill and missing suitable Google Play services. The counter remains usable. Manual **Retry** waits 60 seconds after a failure and shows the remaining delay; it does not reload an already loaded ad. Retry does not activate or approve an AdMob account/app, fix an invalid unit or force ad inventory to be available. There is no automatic background or resume retry loop after a failure. Actual serving remains unverified.
+
+The CI live-APK smoke disables and verifies WiFi and mobile data before installing or opening the live build. It uses native coordinate taps to exercise counting, snapshots and header controls without owner ad impressions. XML, screenshots and a JSON result are uploaded with the emulator reports. These offline UI checks do not test live ad fill or account approval.
 
 Official references:
 

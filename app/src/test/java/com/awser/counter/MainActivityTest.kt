@@ -495,28 +495,6 @@ class MainActivityTest {
         assertEquals(1L, store.count)
     }
 
-    @Test fun quranUsesAnExplicitActivityIntentAndPreservesTheCounterAndBannerController() {
-        layoutActivityWindow()
-        repeat(4) { tapActivityControl("counter") }
-        val ads = bannerControllers.single()
-        val quran = tagged("quran")
-        assertTrue("Quran has an accessible name", quran.contentDescription.toString().contains("Quran", ignoreCase = true))
-        val minimum = 48 * activity.resources.displayMetrics.density
-        assertTrue("Quran has at least 48dp touch width", quran.width >= minimum)
-        assertTrue("Quran has at least 48dp touch height", quran.height >= minimum)
-
-        tapActivityControl("quran")
-        val intent = shadowOf(activity).nextStartedActivity
-        assertNotNull("The Quran control opens a screen", intent)
-        assertNotNull("Quran navigation is explicit", intent.component)
-        assertEquals("com.awser.counter.QuranActivity", intent.component!!.className)
-        assertEquals(4L, store.count)
-        assertEquals(0, store.goal)
-        assertEquals("Quran navigation reuses the counter's existing ad controller", 1, bannerControllers.size)
-        assertSame(ads, bannerControllers.single())
-        assertEquals(1, ads.events.count { it == "start" })
-    }
-
     @Test fun renamingTheCounterUpdatesTheVisibleNameWithoutClearingTheCount() {
         click("counter")
         click("rename")

@@ -8,12 +8,10 @@ Tap the large silver button to count anything you like. The current count saves 
 
 A fresh install starts with no target. If you want one, choose 25, 50, 100 or a custom number; you can turn the target off again. Existing counts and target settings are preserved when upgrading. The default name is simply **Counter**, and you can edit it. Counter names, totals and counting settings stay on your device and are not passed to the advertising SDK. Counting and saved counts work offline without an account; advertisements and consent messages need internet access.
 
-Open **Quran** for a separate offline, ad-free reader containing all 83 verses of Surah Ya-Sin (36:1–83), the complete Ayat-e-Karima verse (21:87) and Ayatul Kursi (2:255). The Arabic text is bundled from an attributed Tanzil snapshot; see [Quran text sources and licensing](docs/QURAN_TEXT_SOURCE.md). The counter keeps its neutral name and optional target.
-
 Features include:
 
 - A physical counter design with a green display and a large silver tap button.
-- **Theme colors** and display-light controls in the header, with compact haptics, target and counter-name controls below.
+- Six aligned icon controls in two rows: day/night, display light and theme colors; then haptics, target and counter name.
 - No target on a fresh install; optional targets of 25, 50 or 100, a custom number, or target off.
 - An editable counter name with no preset categories.
 - 16 named color themes, saved independently of dark/night mode and the display light.
@@ -24,7 +22,6 @@ Features include:
 - A layout that adapts to window size, screen insets and text size, with scrolling when needed.
 - An AdMob banner at the bottom, separate from the count and save controls.
 - Ad status messages and a manual **Retry** action for recoverable ad/consent failures.
-- A separate offline, ad-free Quran reader for complete Ya-Sin, Ayat-e-Karima and Ayatul Kursi.
 
 The app requires Android 6.0 or newer (API 23). It is free to use and includes advertising. See [the privacy policy](docs/PRIVACY.md) for local counter data, advertising SDK data and consent choices.
 
@@ -33,8 +30,6 @@ The app requires Android 6.0 or newer (API 23). It is free to use and includes a
 The screenshot below shows the implemented Android screen. [Light theme screenshot](docs/media/counter-light.webp) · [Tap animation preview](docs/media/counter-tap.gif).
 
 See the [Ocean theme](docs/media/counter-ocean.webp), [Rose theme](docs/media/counter-rose.webp) and [Theme colors picker](docs/media/theme-colors.webp).
-
-The separate offline reader is shown in these native Android captures: [Surah Yaseen](docs/media/quran-yaseen.webp), [Ayat-e-Karima](docs/media/quran-kareema.webp) and [Ayatul Kursi](docs/media/quran-kursi.webp). The Quran screen has no banner, ad status or ad controls.
 
 <img src="docs/media/counter-dark.webp" alt="Tasbih Counter - Zikr Android app in its dark theme" width="320">
 
@@ -56,9 +51,9 @@ After this repository is pushed to GitHub, open **Actions → Android**, select 
 
 Allow installation from the browser or file manager that opens the APK. The public live and preview downloads use the same cloud test certificate as earlier public APKs, so install them as updates without uninstalling. GitHub Actions generates a different test certificate: use the committed public downloads again when updating an APK installed from those links. Mixing public and CI APKs can fail signature checks. Uninstalling or clearing the app's data removes local counter data. These review APKs are not production-signed Play Store releases.
 
-Debug and preview builds always use Google's official test application and banner IDs; live and release builds use the owner's configured production IDs. Do not click your own live ads; use preview or debug for ad-interaction testing. Real ad serving remains unverified here and needs internet access, suitable Google Play services, an eligible AdMob app/ad unit and available ad fill. The counter shows ad status and a **Retry** action for recoverable consent/network failures. Retry cannot approve an AdMob account or guarantee ad fill. Counting remains available when an ad fails. Ads appear only on the main counter screen; the Quran reader does not request or display them. See [AdMob setup](docs/ADMOB_SETUP.md) for configuration and consent.
+Debug and preview builds always use Google's official test application and banner IDs; live and release builds retain the owner's configured production IDs. An unavailable live banner is never replaced with a sample ad. Do not click your own live ads; use preview or debug for ad-interaction testing. The owner reports that AdMob account verification is pending. Real ad serving remains unverified here and also needs internet access, suitable Google Play services, an eligible app/ad unit and available Google ad fill. The counter shows ad status and a **Retry** action for recoverable consent/network failures. Retry cannot approve an AdMob account or guarantee ad fill. Counting remains available when an ad fails. See [AdMob setup](docs/ADMOB_SETUP.md) for configuration and consent.
 
-The workflow builds the live and test-ad APK variants and runs JVM tests, lint, API 35 emulator tests and offline process-restart/same-APK reinstall checks. Open **Actions → Android** for the current push's status and downloadable reports. The JVM suite includes actual-window touch checks for Save/history/restore/delete. The emulator job additionally taps the minified live APK offline to check saved-snapshot persistence, Restore/Delete, the three ad-free Quran readings and Back preserving the counter. Offline live-variant tests do not establish real ad serving. The workflow uses standard `ubuntu-latest` GitHub-hosted runners, which GitHub currently provides free for public repositories. This is automated testing; GitHub Actions does not provide a phone screen you can interact with in your browser.
+The workflow builds the live and test-ad APK variants and runs JVM tests, lint, API 35 emulator tests and offline process-restart/same-APK reinstall checks. Open **Actions → Android** for the current push's status and downloadable reports. The JVM suite includes actual-window touch checks for Save/history/restore/delete. The emulator job also taps the minified live APK offline to check saved-snapshot persistence, Restore/Delete and the aligned header controls. WiFi and mobile data are disabled before the live APK is installed or opened. Offline live-variant tests do not establish real ad serving. The workflow uses standard `ubuntu-latest` GitHub-hosted runners, which GitHub currently provides free for public repositories. This is automated testing; GitHub Actions does not provide a phone screen you can interact with in your browser.
 
 ### Roman Urdu mein
 
@@ -68,7 +63,7 @@ The workflow builds the live and test-ad APK variants and runs JVM tests, lint, 
 4. Bara button dabao: har tap par count barhega aur automatically save hoga. App band karke kholo to count wapas aayega; **Save count** alag snapshot rakhta hai.
 5. Pehli install par target set nahi hota. Apni marzi se target chuno ya off rakho.
 6. **Theme colors** se 16 rangon mein se apna theme chuno. Live ads par khud click na karo; ad buttons test karne ke liye **preview** APK use karo.
-7. **Quran** mein poori Surah Ya-Sin, Ayat-e-Karima aur Ayatul Kursi offline aur baghair ads parho.
+7. Ads ke liye AdMob verification aur Google ki ad fill zaroori hai. **Retry** account approve nahi kar sakta; count internet ke baghair bhi chalega.
 
 ## Develop locally
 
@@ -107,7 +102,9 @@ HTML reports appear under `app/build/reports/tests/`, `app/build/reports/android
 
 ## Build validation
 
-Version 1.6.0 (version code 9) passed all 93 JVM tests with zero failures, errors or skips: storage, themes, counting, actual-window Save/history gestures, real-controller ad recovery, offline Quran text and native screen layouts. All reports belong to this build. Android lint reported zero errors and 15 warnings. Debug, live, preview, unsigned release and instrumentation APKs, plus the unsigned release app bundle, compiled successfully. The signed live APK is 435,235 bytes (425.0 KiB); the test-ad preview is 435,236 bytes. Both passed v1/v2 signature checks using the same certificate as previous public downloads. The production/test app and banner IDs, test-ad flags and all packaged Quran assets were checked. Native Quran captures show readable Arabic and diacritics; narrow/large-font and short-landscape checks passed. Local KVM/device execution is unavailable; check the current GitHub Actions run for the separate real-emulator results. Actual ad serving remains unverified, and the owner reports that AdMob account verification is pending.
+Version 1.7.0 (version code 10) passed 81 JVM tests across seven suites with zero failures, errors or skips. Android lint reported zero errors and eight warnings. Debug, live, preview, unsigned release and instrumentation APKs, plus the unsigned release app bundle, compiled successfully. The live APK is 414,313 bytes (404.6 KiB); the test-ad preview is 414,309 bytes. The previous public signing certificate is retained. The screenshots above were refreshed from this build's native Android captures.
+
+Local KVM/device execution is unavailable in the cloud workspace. The separate real-emulator checks run in GitHub Actions; use **Actions → Android** for the current commit's results and reports. A JVM result does not establish that the emulator checks passed. Actual ad serving remains unverified, and AdMob account verification is pending.
 
 ## Play Store listing draft
 
@@ -115,4 +112,4 @@ Version 1.6.0 (version code 9) passed all 93 JVM tests with zero failures, error
 
 ## Keeping the APK small
 
-The counter is drawn with Android Canvas instead of bundling a UI framework or video animation. Tap animations use native Android animation APIs. Preview and release builds shrink unused code and resources with R8, and the launcher icon is compact. The advertising SDK adds dependencies and increases the APK size. Measure the actual build outputs rather than assuming the size of the earlier build without advertisements.
+The counter is drawn with Android Canvas instead of bundling a UI framework or video animation. Tap animations use native Android animation APIs. Live, preview and release builds shrink unused code and resources with R8, and the launcher icon is compact. The advertising SDK adds dependencies and increases the APK size. Measure the actual build outputs rather than assuming the size of the earlier build without advertisements.

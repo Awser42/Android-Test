@@ -1,6 +1,6 @@
 # Privacy policy — Tasbih Counter - Zikr
 
-Tasbih Counter - Zikr does not require an account. Counting, saved counts and the separate Quran reader work offline. The main counter includes an AdMob banner that uses Google's advertising services and requires internet access. The Quran reader displays no advertisements and does not request ads.
+Tasbih Counter - Zikr does not require an account. Counting and saved counts work offline. The counter includes an AdMob banner that uses Google's advertising services and requires internet access.
 
 ## Data stored on your device
 
@@ -8,15 +8,13 @@ The app stores your current count, saved count snapshots, counter name, optional
 
 A fresh install has no target until you choose one, and you can turn the target off again. Existing counts and target settings are preserved when upgrading. Resetting a count sets the current total to zero. Deleting a saved snapshot removes that item from the app. The app keeps the latest 100 saved snapshots. Uninstalling the app or clearing its data removes its local counter data.
 
-The Quran readings are loaded from packaged Arabic text assets rather than downloaded while reading. Opening or selecting a reading does not pass the verse text or selected passage to the advertising controller. The reader's source credit and license notices are described in [Quran text sources](QURAN_TEXT_SOURCE.md).
-
 ## Permissions
 
 The app uses Android's `VIBRATE` permission for optional vibration feedback. You can turn off haptics in the app. Internet and network access support advertisements and consent messages. The advertising SDK also declares permissions for advertising identifiers, Android AdServices and wake locks. Google Mobile Ads uses advertising features according to consent, device settings and its SDK configuration. The app does not request location, contacts, microphone, camera or shared-storage access.
 
 ## Advertising and analytics
 
-The main counter uses Google Mobile Ads to display an AdMob banner. The SDK may collect or share an IP address and approximate location inferred from it, device or advertising identifiers, ad interactions and diagnostic information. Google uses this information for purposes such as advertising, measurement and fraud prevention, according to the relevant consent choices and device settings. This is separate from the counter names, totals and saved counts stored by the app. The Quran screen has no advertising controller and starts no ad requests. The SDK's shared manifest components remain in the app, so its documented data practices still apply.
+The counter uses Google Mobile Ads to display an AdMob banner. The SDK may collect or share an IP address and approximate location inferred from it, device or advertising identifiers, ad interactions and diagnostic information. Google uses this information for purposes such as advertising, measurement and fraud prevention, according to the relevant consent choices and device settings. This is separate from the counter names, totals and saved counts stored by the app. The SDK's shared manifest components remain in the app, so its documented data practices apply.
 
 See Google's [Mobile Ads SDK data disclosure](https://developers.google.com/admob/android/privacy/play-data-disclosure) and [privacy policy](https://policies.google.com/privacy) for the SDK's data practices.
 

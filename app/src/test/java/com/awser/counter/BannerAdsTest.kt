@@ -175,7 +175,7 @@ class BannerControllerRegressionTest {
 
     @Test fun pausedCounterDefersPrivacyFormInitializationAndAdLoadUntilItReturns() {
         ads.resume()
-        ads.pause() // The separate Quran screen is now foreground.
+        ads.pause() // The counter is now backgrounded.
         sdk.consentSucceeded()
         assertEquals(0, sdk.consentForms)
         assertEquals(0, sdk.initializations)

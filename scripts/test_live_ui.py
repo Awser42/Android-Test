@@ -30,8 +30,14 @@ APK = ROOT / "app/build/outputs/apk/live/app-live.apk"
 REPORTS = ROOT / "app/build/reports/live-ui"
 COUNTER = re.compile(r"Add one\. Count ([0-9]+)")
 BOUNDS = re.compile(r"\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]")
-ARABIC = re.compile(r"[\u0621-\u064a]")
-AD_WORDS = re.compile(r"\b(?:ads?|banner|advertisement|advertising|retry|privacy options)\b", re.I)
+HEADER_DESCRIPTIONS = {
+    "day_night": re.compile(r"Switch to (?:light|dark) theme"),
+    "display_light": re.compile(r"Turn display light (?:off|on)"),
+    "colors": re.compile(r"Theme colors\. [A-Za-z]+ selected"),
+    "haptics": re.compile(r"Haptics (?:on|off)\. Toggle haptics"),
+    "target": re.compile(r"Set an optional target\. No target selected|Change target\. Current target [0-9]+"),
+    "rename": re.compile(r"Rename"),
+}
 
 
 class SmokeTest:
@@ -152,6 +158,37 @@ class SmokeTest:
         node = self.wait_ui(label, lambda root: self.button(root, text, resource_id))
         self.tap_node(node)
 
+    def described_button(self, root: ET.Element, description: str | re.Pattern[str]) -> ET.Element:
+        pattern = re.compile(re.escape(description)) if isinstance(description, str) else description
+        matches = [node for node in self.nodes(root) if node.get("class") == "android.widget.Button"
+                   and pattern.fullmatch(node.get("content-desc", "")) and node.get("enabled") == "true"
+                   and node.get("clickable") == "true"]
+        if len(matches) != 1:
+            raise RuntimeError(f"Expected one native button described by {pattern.pattern!r}, found {len(matches)}")
+        self.bounds(matches[0])
+        return matches[0]
+
+    def wait_description(self, description: str | re.Pattern[str], label: str) -> ET.Element:
+        return self.wait_ui(label, lambda root: self.described_button(root, description))
+
+    def tap_description(self, description: str | re.Pattern[str], label: str) -> None:
+        self.tap_node(self.wait_description(description, label))
+
+    def tap_target_choice(self, text: str, label: str) -> None:
+        def choice(root: ET.Element) -> ET.Element:
+            self.require_text(root, "Choose your target")
+            matches = [node for node in self.nodes(root) if node.get("text") == text
+                       and node.get("class") in ("android.widget.TextView", "android.widget.CheckedTextView")
+                       and node.get("enabled") == "true"]
+            if len(matches) != 1:
+                raise RuntimeError(f"Expected one native target choice {text!r}, found {len(matches)}")
+            self.bounds(matches[0])
+            return matches[0]
+        # AlertDialog list labels may delegate clicks to the parent ListView. Tap
+        # their actual visible text bounds, only inside the known target dialog.
+        left, top, right, bottom = self.bounds(self.wait_ui(label, choice))
+        self.command("shell", "input", "tap", str((left + right) // 2), str((top + bottom) // 2))
+
     def require_text(self, root: ET.Element, text: str, starts_with: bool = False) -> None:
         if not any(node.get("text", "").startswith(text) if starts_with else node.get("text") == text for node in self.nodes(root)):
             raise RuntimeError(f"Missing native text {text!r}")
@@ -230,46 +267,90 @@ class SmokeTest:
             time.sleep(0.2)
         raise RuntimeError(f"Expected resumed {name}, found {resumed!r}")
 
-    def no_quran_ads(self, root: ET.Element) -> None:
-        for node in root.iter("node"):
-            resource = node.get("resource-id", "").lower()
-            classname = node.get("class", "").lower()
-            if "com.google.android.gms.ads" in classname or any(key in resource for key in ("ad_banner", "ad_status", "ad_retry")):
-                raise RuntimeError("Quran screen contains an advertising view")
-            if node.get("package") == PACKAGE and AD_WORDS.search(node.get("text", "") + " " + node.get("content-desc", "")):
-                raise RuntimeError("Quran screen contains ad/status/retry UI")
+    def header_geometry(self, root: ET.Element) -> dict[str, tuple[int, int, int, int]]:
+        controls = {name: self.bounds(self.described_button(root, description))
+                    for name, description in HEADER_DESCRIPTIONS.items()}
+        rows = [("day_night", "display_light", "colors"), ("haptics", "target", "rename")]
+        centers = []
+        for names in rows:
+            bounds = [controls[name] for name in names]
+            center_x = [(left + right) / 2 for left, top, right, bottom in bounds]
+            center_y = [(top + bottom) / 2 for left, top, right, bottom in bounds]
+            if max(center_y) - min(center_y) > 2 or not center_x[0] < center_x[1] < center_x[2]:
+                raise RuntimeError(f"Header row {names!r} is not horizontally aligned")
+            if any(abs((right - left) - (bottom - top)) > 2 for left, top, right, bottom in bounds):
+                raise RuntimeError("Icon touch controls must have square bounds")
+            if any(bounds[index][2] > bounds[index + 1][0] for index in (0, 1)):
+                raise RuntimeError("Header touch targets overlap")
+            centers.append(center_x)
+        if any(abs(top - bottom) > 2 for top, bottom in zip(*centers)):
+            raise RuntimeError("Header rows do not share the same three column centers")
+        if controls["day_night"][3] > controls["haptics"][1]:
+            raise RuntimeError("Header rows overlap vertically")
+        return controls
 
-    def reading(self, root: ET.Element, title: str, total: str) -> None:
-        self.no_quran_ads(root)
-        self.require_text(root, "Quran")
-        self.require_text(root, title)
-        self.require_text(root, total)
-        choice = self.button(root, title)
-        if choice.get("content-desc") != f"{title}, selected":
-            raise RuntimeError(f"{title} is not the selected reading")
-        if not any(node.get("class") == "android.widget.TextView" and ARABIC.search(node.get("text", "")) for node in self.nodes(root)):
-            raise RuntimeError(f"{title} has no accessible native Arabic text")
+    def header_features(self) -> None:
+        self.report["header_bounds_before"] = self.wait_ui("header-alignment-before", self.header_geometry)
+        self.wait_description("Set an optional target. No target selected", "fresh-optional-target")
+        self.screenshot("counter-controls-before")
 
-    def verse_marker(self, title: str, number: int, label: str) -> None:
-        # Long Ayatul Kursi can put its verse number below the initial viewport.
-        for attempt in range(8):
-            root = self.wait_ui(f"{label}-viewport-{attempt}", lambda tree: self.quran_viewport(tree, title))
-            if any(node.get("text") == f"Verse {number}" for node in self.nodes(root)):
-                return
-            scrolls = [node for node in self.nodes(root) if node.get("class") == "android.widget.ScrollView"]
-            if len(scrolls) != 1:
-                raise RuntimeError("Expected one native Quran reader ScrollView")
-            left, top, right, bottom = self.bounds(scrolls[0])
-            x = (left + right) // 2
-            self.command("shell", "input", "swipe", str(x), str(bottom - (bottom - top) // 5), str(x), str(top + (bottom - top) // 5), "400")
-        raise RuntimeError(f"{title} has no visible Verse {number} marker after scrolling")
+        before_theme = self.wait_description(HEADER_DESCRIPTIONS["day_night"], "before-day-night").get("content-desc")
+        after_theme = "Switch to dark theme" if before_theme == "Switch to light theme" else "Switch to light theme"
+        self.tap_description(before_theme, "toggle-day-night")
+        self.wait_description(after_theme, "after-day-night")
+        self.wait_counter(3, "count-after-day-night")
 
-    def quran_viewport(self, root: ET.Element, title: str) -> ET.Element:
-        self.no_quran_ads(root)
-        choice = self.button(root, title)
-        if choice.get("content-desc") != f"{title}, selected":
-            raise RuntimeError(f"{title} is not selected")
-        return root
+        before_light = self.wait_description(HEADER_DESCRIPTIONS["display_light"], "before-display-light").get("content-desc")
+        after_light = "Turn display light on" if before_light == "Turn display light off" else "Turn display light off"
+        self.tap_description(before_light, "toggle-display-light")
+        self.wait_description(after_light, "after-display-light")
+        self.wait_counter(3, "count-after-display-light")
+
+        before_haptics = self.wait_description(HEADER_DESCRIPTIONS["haptics"], "before-haptics").get("content-desc")
+        after_haptics = "Haptics off. Toggle haptics" if before_haptics == "Haptics on. Toggle haptics" else "Haptics on. Toggle haptics"
+        self.tap_description(before_haptics, "toggle-haptics")
+        self.wait_description(after_haptics, "after-haptics")
+        self.complete("day/night, display-light and haptics taps change their settings")
+
+        self.tap_description(HEADER_DESCRIPTIONS["colors"], "open-colors")
+        self.wait_ui("colors-dialog", lambda root: self.require_text(root, "Theme colors"))
+        self.tap_description("Jade color theme", "select-jade")
+        self.wait_description("Theme colors. Jade selected", "jade-selected")
+        self.wait_counter(3, "count-after-color-change")
+        self.complete("theme-color choice applies without changing the count")
+
+        self.tap_description("Set an optional target. No target selected", "open-target")
+        self.tap_target_choice("25", "choose-target-25")
+        self.wait_description("Change target. Current target 25", "target-25-selected")
+        self.wait_counter(3, "count-with-target")
+        self.tap_description("Change target. Current target 25", "change-target")
+        self.tap_target_choice("No target", "turn-target-off")
+        self.wait_description("Set an optional target. No target selected", "optional-target-off")
+        self.wait_counter(3, "count-after-target-off")
+        self.complete("optional target can be set and removed without clearing the count")
+
+        self.tap_description("Rename", "open-rename")
+        def rename_dialog(root: ET.Element) -> None:
+            self.require_text(root, "Rename counter")
+            if len([node for node in self.nodes(root) if node.get("class") == "android.widget.EditText"]) != 1:
+                raise RuntimeError("Rename must open a native name editor")
+            self.button(root, "Cancel", "android:id/button2")
+        self.wait_ui("rename-dialog", rename_dialog)
+        self.tap_button("Cancel", "cancel-rename", "android:id/button2")
+        self.wait_counter(3, "count-after-rename-cancel")
+        self.complete("Rename opens its editor and Cancel preserves the count")
+
+        self.restart(3, "header-settings-process-restart")
+        expected = {"day_night": after_theme, "display_light": after_light,
+                    "haptics": after_haptics, "colors": "Theme colors. Jade selected",
+                    "target": "Set an optional target. No target selected"}
+        for name, description in expected.items():
+            self.wait_description(description, f"persisted-{name}")
+        self.report["header_settings_after_restart"] = expected
+        self.report["header_bounds_after_restart"] = self.wait_ui("header-alignment-after-restart", self.header_geometry)
+        self.activity("MainActivity")
+        self.screenshot("counter-controls-after-restart")
+        self.complete("header settings survive a fresh process with aligned controls and count 3")
 
     def screenshot(self, label: str) -> None:
         if not self.adb or not self.serial:
@@ -344,24 +425,8 @@ class SmokeTest:
         self.wait_counter(3, "count-after-deletion")
         self.complete("Delete removes snapshot persistently and preserves active count")
 
-        self.phase = "quran"
-        self.tap_button("Quran", "open-quran")
-        self.activity("QuranActivity")
-        readings = [("Surah Yaseen", "83 verses", 1, "yaseen"),
-                    ("Ayat-e-Karima", "1 verse", 87, "karima"),
-                    ("Ayatul Kursi", "1 verse", 255, "kursi")]
-        for index, (title, total, verse, label) in enumerate(readings):
-            if index:
-                self.tap_button(title, f"choose-{label}")
-            self.wait_ui(f"reading-{label}", lambda root: self.reading(root, title, total))
-            self.screenshot(f"quran-{label}")
-            self.verse_marker(title, verse, label)
-            self.complete(f"ad-free {title}: {total}, Arabic text and Verse {verse}")
-        self.tap_button("Back", "quran-back")
-        self.activity("MainActivity")
-        self.wait_counter(3, "counter-after-quran")
-        self.screenshot("counter-after-quran")
-        self.complete("Quran Back preserves active count")
+        self.phase = "header"
+        self.header_features()
         self.report["result"] = "passed"
 
     def finish(self, error: Exception | None, duration: float) -> None:
@@ -392,7 +457,7 @@ def main() -> int:
     if error:
         print(f"Live UI smoke failed: {error}", file=sys.stderr)
         return 1
-    print(f"Offline live UI passed: counter, Save/Restore/Delete, Quran and Back. Reports: {REPORTS}")
+    print(f"Offline live UI passed: counter, Save/Restore/Delete and aligned header controls. Reports: {REPORTS}")
     return 0
 
 

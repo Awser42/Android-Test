@@ -136,6 +136,10 @@ class ScreenshotTest {
     @Test @Config(qualifiers = "w320dp-h640dp-xxhdpi")
     fun largestTextReflowsWithoutClipping() = export("counter-font-200", 960, 1920, true, fontScale = 2f, privacyRequired = true)
 
+    @Test @Config(qualifiers = "w240dp-h480dp-xxhdpi")
+    fun alignedHeaderIconsStayCenteredInTheNarrowestWindowWithLargestText() =
+        export("counter-header-narrow-font-200", 720, 1440, true, fontScale = 2f, privacyRequired = true)
+
     @Test @Config(qualifiers = "w360dp-h800dp-xxhdpi")
     fun explicitTargetShowsProgress() {
         CounterStore(RuntimeEnvironment.getApplication()).setGoal(100)
@@ -227,6 +231,7 @@ class ScreenshotTest {
         assertNotNull("Theme and LCD light have a header in $name", header)
         assertNotNull(header.findViewWithTag<View>("theme"))
         assertNotNull(header.findViewWithTag<View>("light"))
+        assertHeaderGeometry(root, activity, name)
         val counter = root.findViewWithTag<View>("counter")
         assertNotNull("Counter tap target exists in $name", counter)
         assertTouchSize(counter, "counter", activity, name)
@@ -256,6 +261,57 @@ class ScreenshotTest {
         val minimum = 48 * activity.resources.displayMetrics.density
         assertTrue("$tag has 48dp touch width in $name", view.width >= minimum)
         assertTrue("$tag has 48dp touch height in $name", view.height >= minimum)
+    }
+
+    private fun assertHeaderGeometry(root: View, activity: MainActivity, name: String) {
+        val rows = listOf(
+            "header_appearance_controls" to listOf("theme", "light", "theme_colors"),
+            "header_counter_controls" to listOf("vibration", "goal", "rename"),
+        )
+        val expectedSize = (48 * activity.resources.displayMetrics.density + .5f).toInt()
+        val columnCenters = mutableListOf<List<Float>>()
+        var previousRowBottom = Float.NEGATIVE_INFINITY
+        rows.forEach { (rowTag, tags) ->
+            val row = root.findViewWithTag<ViewGroup>(rowTag)
+            assertNotNull("$rowTag exists in $name", row)
+            assertEquals("$rowTag keeps three stable columns in $name", 3, row.childCount)
+            val rowLocation = IntArray(2).also { row.getLocationInWindow(it) }
+            assertTrue("Header rows never overlap in $name", rowLocation[1].toFloat() >= previousRowBottom)
+            previousRowBottom = (rowLocation[1] + row.height).toFloat()
+            val centers = tags.mapIndexed { index, tag ->
+                val control = row.findViewWithTag<TextView>(tag)
+                assertNotNull("$tag remains in its named row in $name", control)
+                assertSame("$tag keeps its visible left-to-right order in $name", row.getChildAt(index), control.parent)
+                assertEquals("$tag keeps its 48dp touch width in $name", expectedSize, control.width)
+                assertEquals("$tag keeps its 48dp touch height in $name", expectedSize, control.height)
+                val column = row.getChildAt(index)
+                val columnLocation = IntArray(2).also { column.getLocationInWindow(it) }
+                val location = IntArray(2).also { control.getLocationInWindow(it) }
+                // Integer pixel layout permits half a pixel of centre rounding.
+                assertEquals("$tag touch area is centered in its column in $name", columnLocation[0] + column.width / 2f, location[0] + control.width / 2f, .5f)
+                assertEquals("$tag touch area is vertically centered in $name", rowLocation[1] + row.height / 2f, location[1] + control.height / 2f, .5f)
+                assertTrue("$tag stays inside its row in $name", location[0] >= rowLocation[0] && location[0] + control.width <= rowLocation[0] + row.width)
+
+                // Draw the actual native control even when a short window has scrolled its row away.
+                val bitmap = Bitmap.createBitmap(control.width, control.height, Bitmap.Config.ARGB_8888)
+                try { control.draw(Canvas(bitmap)) } finally { bitmap.recycle() }
+                val glyph = control.foreground
+                assertNotNull("$tag has a native icon foreground in $name", glyph)
+                val bounds = glyph.bounds
+                assertTrue("$tag icon was actually drawn in $name", bounds.width() > 0 && bounds.height() > 0)
+                assertTrue("$tag icon stays inside the touch area in $name", Rect(0, 0, control.width, control.height).contains(bounds))
+                assertEquals("$tag icon is horizontally centered in $name", control.width / 2f, (bounds.left + bounds.right) / 2f, .5f)
+                assertEquals("$tag icon is vertically centered in $name", control.height / 2f, (bounds.top + bounds.bottom) / 2f, .5f)
+                assertTrue("$tag has no side-positioned compound icon in $name", control.compoundDrawables.all { it == null })
+                location[0] + control.width / 2f
+            }
+            assertTrue("Icons keep left-to-right order in $name", centers[0] < centers[1] && centers[1] < centers[2])
+            assertEquals("Header columns have equal spacing in $name", centers[1] - centers[0], centers[2] - centers[1], 1f)
+            columnCenters += centers
+        }
+        columnCenters[0].indices.forEach { column ->
+            assertEquals("Appearance and counter icons share true column centers in $name", columnCenters[0][column], columnCenters[1][column], 0f)
+        }
     }
 
     private fun savePng(view: View, name: String, width: Int, height: Int) {

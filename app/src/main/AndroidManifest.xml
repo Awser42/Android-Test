@@ -12,9 +12,6 @@
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${adMobAppId}" />
         <activity
-            android:name=".QuranActivity"
-            android:exported="false" />
-        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
