@@ -3,8 +3,13 @@ package com.awser.counter
 import android.app.AlertDialog
 import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Rect
 import android.os.Looper
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -42,6 +47,7 @@ class MainActivityTest {
     @After fun close() {
         controller.pause().stop().destroy()
         BannerAds.factory = null
+        RuntimeEnvironment.setFontScale(1f)
     }
 
     @Test fun actualCounterButtonUpdatesVisibleCountAndPersistsEveryTap() {
@@ -424,6 +430,93 @@ class MainActivityTest {
         assertEquals(7L, store.count)
     }
 
+    @Test fun saveHistoryRestoreAndDeleteRespondToTouchesRoutedFromTheirActualWindows() {
+        layoutActivityWindow()
+        repeat(7) { tapActivityControl("counter") }
+        assertEquals(7L, store.count)
+
+        tapActivityControl("save")
+        val save = latestVisibleDialog()
+        val saveInput = save.window!!.decorView.findViewWithTag<EditText>("session_name")
+        assertFalse("An optional name must not request keyboard focus on opening Save", saveInput.hasFocus())
+        assertEquals("Text entry keeps the native Save/Cancel actions reachable", WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+            save.window!!.attributes.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST)
+        saveInput.setText("")
+        tapDialogButton(save, AlertDialog.BUTTON_POSITIVE)
+        assertFalse("Saving closes the dialog without requiring a name", save.isShowing)
+        val session = store.sessions().single()
+        assertEquals("Counter", session.label)
+        assertEquals(7L, session.count)
+        assertEquals(0, session.goal)
+        assertEquals("Saving preserves the active count", 7L, store.count)
+
+        repeat(2) { tapActivityControl("counter") }
+        assertEquals(9L, store.count)
+        tapActivityControl("history")
+        var history = latestVisibleDialog()
+        tapDialogControl(history, "history_row_${session.id}")
+        assertFalse("Opening a saved count closes the history list", history.isShowing)
+        val restore = latestVisibleDialog()
+        tapDialogButton(restore, AlertDialog.BUTTON_POSITIVE)
+        assertEquals("Restore responds to the native dialog button", 7L, store.count)
+        assertEquals("Counter", store.counterName)
+        assertEquals(0, store.goal)
+
+        tapActivityControl("history")
+        history = latestVisibleDialog()
+        tapDialogControl(history, "history_row_${session.id}")
+        val actions = latestVisibleDialog()
+        tapDialogButton(actions, AlertDialog.BUTTON_NEUTRAL)
+        val confirm = latestVisibleDialog()
+        assertEquals("Delete requires the separate confirmation", 1, store.sessions().size)
+        tapDialogButton(confirm, AlertDialog.BUTTON_POSITIVE)
+        assertTrue("Confirmed delete responds to a touch through its dialog", store.sessions().isEmpty())
+        assertEquals("Deleting history preserves the active count", 7L, store.count)
+        assertTrue("The empty history remains reachable", latestVisibleDialog().isShowing)
+    }
+
+    @Test @Config(qualifiers = "w240dp-h480dp-xxhdpi")
+    fun bottomSaveAndHistoryRemainTouchableInAShortNarrowWindowWithLargestText() {
+        RuntimeEnvironment.setFontScale(2f)
+        controller.pause().stop().destroy()
+        controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        activity = controller.get()
+        layoutActivityWindow()
+
+        tapActivityControl("counter")
+        tapActivityControl("save")
+        val save = latestVisibleDialog()
+        tapDialogButton(save, AlertDialog.BUTTON_POSITIVE)
+        assertEquals(1L, store.sessions().single().count)
+        tapActivityControl("history")
+        val history = latestVisibleDialog()
+        tapDialogControl(history, "history_row_${store.sessions().single().id}")
+        assertTrue("A scrolled history row opens its actions", latestVisibleDialog().isShowing)
+        assertEquals(1L, store.count)
+    }
+
+    @Test fun quranUsesAnExplicitActivityIntentAndPreservesTheCounterAndBannerController() {
+        layoutActivityWindow()
+        repeat(4) { tapActivityControl("counter") }
+        val ads = bannerControllers.single()
+        val quran = tagged("quran")
+        assertTrue("Quran has an accessible name", quran.contentDescription.toString().contains("Quran", ignoreCase = true))
+        val minimum = 48 * activity.resources.displayMetrics.density
+        assertTrue("Quran has at least 48dp touch width", quran.width >= minimum)
+        assertTrue("Quran has at least 48dp touch height", quran.height >= minimum)
+
+        tapActivityControl("quran")
+        val intent = shadowOf(activity).nextStartedActivity
+        assertNotNull("The Quran control opens a screen", intent)
+        assertNotNull("Quran navigation is explicit", intent.component)
+        assertEquals("com.awser.counter.QuranActivity", intent.component!!.className)
+        assertEquals(4L, store.count)
+        assertEquals(0, store.goal)
+        assertEquals("Quran navigation reuses the counter's existing ad controller", 1, bannerControllers.size)
+        assertSame(ads, bannerControllers.single())
+        assertEquals(1, ads.events.count { it == "start" })
+    }
+
     @Test fun renamingTheCounterUpdatesTheVisibleNameWithoutClearingTheCount() {
         click("counter")
         click("rename")
@@ -468,6 +561,83 @@ class MainActivityTest {
     private fun clickDialogButton(dialog: AlertDialog, which: Int) {
         dialog.getButton(which).performClick()
         // Framework AlertDialog posts its builder listeners through ButtonHandler.
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private fun latestVisibleDialog(): AlertDialog = ShadowAlertDialog.getLatestAlertDialog().also {
+        assertNotNull("A native dialog opens after the touch", it)
+        assertTrue("The native dialog is visible", it.isShowing)
+    }
+
+    private fun layoutActivityWindow() {
+        val metrics = activity.resources.displayMetrics
+        layoutWindow(activity.window.decorView, metrics.widthPixels, metrics.heightPixels, View.MeasureSpec.EXACTLY)
+    }
+
+    private fun layoutDialogWindow(dialog: AlertDialog) {
+        val metrics = activity.resources.displayMetrics
+        // Fit the decor to the real physical display, leaving the usual dialog margins.
+        val width = (metrics.widthPixels * 0.9f).toInt()
+        val maximumHeight = metrics.heightPixels - (32 * metrics.density).toInt()
+        layoutWindow(dialog.window!!.decorView, width, maximumHeight, View.MeasureSpec.AT_MOST)
+    }
+
+    private fun layoutWindow(decor: View, width: Int, height: Int, heightMode: Int) {
+        shadowOf(Looper.getMainLooper()).idle()
+        repeat(3) {
+            forceLayoutTree(decor)
+            decor.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, heightMode))
+            decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
+        }
+    }
+
+    private fun forceLayoutTree(view: View) {
+        view.forceLayout()
+        if (view is ViewGroup) for (index in 0 until view.childCount) forceLayoutTree(view.getChildAt(index))
+    }
+
+    private fun tapActivityControl(tag: String) {
+        val decor = activity.window.decorView
+        val control = decor.findViewWithTag<View>(tag)
+        assertNotNull("A real control exists for $tag", control)
+        tapThroughDecor(decor, control, tag)
+    }
+
+    private fun tapDialogControl(dialog: AlertDialog, tag: String) {
+        layoutDialogWindow(dialog)
+        val decor = dialog.window!!.decorView
+        val control = decor.findViewWithTag<View>(tag)
+        assertNotNull("A native dialog control exists for $tag", control)
+        tapThroughDecor(decor, control, tag)
+    }
+
+    private fun tapDialogButton(dialog: AlertDialog, which: Int) {
+        layoutDialogWindow(dialog)
+        tapThroughDecor(dialog.window!!.decorView, dialog.getButton(which), "dialog button $which")
+    }
+
+    private fun tapThroughDecor(decor: View, control: View, description: String) {
+        assertTrue("$description is enabled", control.isEnabled)
+        assertTrue("$description has a measured target", control.width > 0 && control.height > 0)
+        control.requestRectangleOnScreen(Rect(0, 0, control.width, control.height), true)
+        val visible = Rect()
+        assertTrue("$description is reachable in its window", control.getGlobalVisibleRect(visible))
+        assertEquals("$description is wholly visible horizontally", control.width, visible.width())
+        assertEquals("$description is wholly visible vertically", control.height, visible.height())
+        val origin = IntArray(2).also { decor.getLocationOnScreen(it) }
+        val x = visible.exactCenterX() - origin[0]
+        val y = visible.exactCenterY() - origin[1]
+        val startedAt = SystemClock.uptimeMillis()
+        listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP).forEach { action ->
+            val event = MotionEvent.obtain(startedAt, SystemClock.uptimeMillis(), action, x, y, 0)
+            try {
+                assertTrue("The window routes the touch to $description", decor.dispatchTouchEvent(event))
+            } finally {
+                event.recycle()
+            }
+        }
+        // Native View clicks and AlertDialog listeners can be posted to the main looper.
         shadowOf(Looper.getMainLooper()).idle()
     }
 

@@ -14,6 +14,8 @@ Tasbih Counter - Zikr is a simple, free counter for tasbih, zikr and everyday co
 
 Start with a clean counter named Counter and no target. Give it any name you choose, and set a target only if you want one. You can turn the target off again. The app leaves the words and purpose of your count to you. Compact controls keep haptics, target, counter name, theme and display light within reach.
 
+Open the separate Quran reader for all 83 verses of Surah Ya-Sin (36:1–83), the complete Ayat-e-Karima verse (21:87) and Ayatul Kursi (2:255). The bundled Arabic text can be read offline, with no ads on reading pages.
+
 Features:
 
 - A physical counter design with a green display and silver buttons.
@@ -28,12 +30,15 @@ Features:
 - Reduced-motion support through Android's animation setting.
 - Your current count and settings save automatically; the Save count button creates a separate snapshot.
 - A layout that adapts to window size and text size, with scrolling when needed.
+- A separate offline, ad-free reader for complete Ya-Sin, Ayat-e-Karima and Ayatul Kursi.
 
-Counting and saved counts work offline without an account. Your counter names, totals and saved counts stay on your device and are not passed to the advertising SDK. The app includes a banner advertisement at the bottom. Ads and consent messages require internet access. There are no in-app purchases or subscriptions.
+Counting, saved counts and Quran reading work offline without an account. Your counter names, totals and saved counts stay on your device and are not passed to the advertising SDK. The main counter includes a banner advertisement at the bottom, with status information and Retry for recoverable failures. Ads and consent messages require internet access. Quran reading pages do not request or display advertisements. There are no in-app purchases or subscriptions.
 
 Existing counts and target settings are kept when upgrading. Uninstalling the app or clearing its data removes local counter data.
 
 Built for Android 6.0 and newer, with a compact native interface for straightforward counting.
+
+Arabic Quran text is credited to the Tanzil Project. Source and license details are available in the app and in [QURAN_TEXT_SOURCE.md](QURAN_TEXT_SOURCE.md).
 
 ## Publication notes
 

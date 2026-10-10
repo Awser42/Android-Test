@@ -5,6 +5,7 @@ import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
@@ -32,6 +33,7 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -61,6 +63,11 @@ class MainActivity : Activity() {
     private lateinit var vibrationButton: Button
     private lateinit var bannerAds: BannerAdController
     private lateinit var adPrivacyButton: Button
+    private lateinit var adStatusRow: View
+    private lateinit var adStatusLabel: TextView
+    private lateinit var adRetryButton: Button
+    private lateinit var adDetailsButton: Button
+    private var adStatus = BannerAdStatus("")
     private var adPrivacyRequired = false
     private var adaptiveContent: AdaptiveContent? = null
     private var renderedDarkTheme: Boolean? = null
@@ -77,6 +84,12 @@ class MainActivity : Activity() {
                 adPrivacyRequired = required
                 if (::adPrivacyButton.isInitialized) adPrivacyButton.visibility = if (required) View.VISIBLE else View.GONE
                 adaptiveContent?.requestLayout()
+            }
+        }
+        bannerAds.setStatusListener { status ->
+            runOnUiThread {
+                adStatus = status
+                refreshAdStatus()
             }
         }
         renderScreen()
@@ -158,7 +171,11 @@ class MainActivity : Activity() {
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END
         }
-        topPanel.addView(counterNameLabel, marginParams(-1, -2, top = 12))
+        val quranButton = actionButton("quran", "Quran") {
+            startActivity(Intent(this, QuranActivity::class.java))
+        }.apply { contentDescription = "Open Quran. Read Yaseen, Ayat-e-Karima and Ayatul Kursi without ads" }
+        topPanel.addView(AdaptiveRow(counterNameLabel, quranButton, equal = false, gap = dp(12)),
+            marginParams(-1, -2, top = 12))
 
         counter = CounterView(this).apply {
             setColorTheme(colorTheme)
@@ -227,9 +244,27 @@ class MainActivity : Activity() {
             addView(content, FrameLayout.LayoutParams(-1, -2))
         }
         val bannerContainer = FrameLayout(this).apply { tag = "ad_banner_container" }
+        adStatusLabel = label("", 12f, palette.muted).apply { tag = "ad_status" }
+        adRetryButton = actionButton("ad_retry", "Retry") { bannerAds.retry() }
+        adDetailsButton = iconButton("ad_details", "Ad details", "details") {
+            if (adStatus.detail.isNotBlank()) {
+                showDialog(AlertDialog.Builder(dialogContext()).setTitle("Ad details")
+                    .setMessage(adStatus.detail).setPositiveButton("Done", null).create())
+            }
+        }
+        val adStatusControls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(adDetailsButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) })
+            addView(adRetryButton, LinearLayout.LayoutParams(-2, -2))
+        }
+        adStatusRow = AdaptiveRow(adStatusLabel, adStatusControls, equal = false, gap = dp(8)).apply {
+            tag = "ad_status_row"
+            setPadding(dp(12), dp(4), dp(12), dp(4))
+        }
         val screen = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+            addView(adStatusRow, LinearLayout.LayoutParams(-1, -2))
             addView(bannerContainer, LinearLayout.LayoutParams(-1, -2))
         }
         root.addView(screen, FrameLayout.LayoutParams(-1, -1))
@@ -246,6 +281,16 @@ class MainActivity : Activity() {
         refreshSettings()
         refreshCounter(false)
         refreshCounterName()
+        refreshAdStatus()
+    }
+
+    private fun refreshAdStatus() {
+        if (!::adStatusRow.isInitialized) return
+        adStatusLabel.text = adStatus.message
+        adStatusRow.visibility = if (adStatus.message.isBlank()) View.GONE else View.VISIBLE
+        adRetryButton.visibility = if (adStatus.canRetry) View.VISIBLE else View.GONE
+        adDetailsButton.visibility = if (adStatus.detail.isNotBlank()) View.VISIBLE else View.GONE
+        (adRetryButton.parent as View).visibility = if (adStatus.canRetry || adStatus.detail.isNotBlank()) View.VISIBLE else View.GONE
     }
 
     private fun refreshSettings() {
@@ -302,23 +347,31 @@ class MainActivity : Activity() {
     private fun showSaveDialog() {
         val input = input(store.counterName, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
             tag = "session_name"
-            hint = "Count name"
+            hint = "Count name (optional)"
             filters = arrayOf(InputFilter.LengthFilter(60))
             selectAll()
         }
         val box = LinearLayout(dialogContext()).apply {
             orientation = LinearLayout.VERTICAL
+            // Naming is optional; opening Save must not need an on-screen keyboard.
+            isFocusableInTouchMode = true
+            descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
             setPadding(dp(24), dp(10), dp(24), dp(8))
             addView(label("${numberFormat.format(store.count)} total · Your counter keeps its current count.", 14f, palette.muted))
             addView(input, marginParams(-1, -2, top = 12))
         }
-        showDialog(AlertDialog.Builder(dialogContext()).setTitle("Save count").setView(box)
+        val scroll = ScrollView(dialogContext()).apply { addView(box) }
+        val dialog = AlertDialog.Builder(dialogContext()).setTitle("Save count").setView(scroll)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Save") { _, _ ->
                 if (persistAction { store.saveSession(input.text.toString().trim().ifEmpty { store.counterName }) }) {
                     Toast.makeText(this, "Count saved", Toast.LENGTH_SHORT).show()
                 }
-            }.create())
+            }.create()
+        showDialog(dialog)
+        dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        box.requestFocus()
     }
 
     private fun showHistoryDialog() {
@@ -497,12 +550,12 @@ class MainActivity : Activity() {
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         isAllCaps = false
         setTextColor(palette.foreground)
-        minimumWidth = 0
-        minWidth = 0
-        minimumHeight = dp(48)
-        minHeight = dp(48)
         setPadding(dp(12), dp(10), dp(12), dp(10))
         background = buttonBackground(true)
+        minimumWidth = dp(48)
+        minWidth = dp(48)
+        minimumHeight = dp(48)
+        minHeight = dp(48)
         contentDescription = title
         setOnClickListener { action() }
     }
@@ -618,7 +671,8 @@ class MainActivity : Activity() {
             val available = View.MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
             fun naturalWidth(view: View): Int {
                 if (view.visibility == View.GONE) return 0
-                if (view is Button) return ceil(view.paint.measureText(view.text.toString())).toInt() + view.paddingLeft + view.paddingRight + dp(8)
+                if (view is Button) return max(max(view.minimumWidth, view.minWidth),
+                    ceil(view.paint.measureText(view.text.toString())).toInt() + view.paddingLeft + view.paddingRight + dp(8))
                 view.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
                 return view.measuredWidth
             }
@@ -869,6 +923,12 @@ class MainActivity : Activity() {
                     val left = Path().apply { moveTo(12f, 5f); cubicTo(8f, 2f, 4f, 3f, 2f, 4f); lineTo(2f, 20f); cubicTo(6f, 18f, 9f, 19f, 12f, 21f); close() }
                     val right = Path().apply { moveTo(12f, 5f); cubicTo(16f, 2f, 20f, 3f, 22f, 4f); lineTo(22f, 20f); cubicTo(18f, 18f, 15f, 19f, 12f, 21f); close() }
                     canvas.drawPath(left, paint); canvas.drawPath(right, paint)
+                }
+                "details" -> {
+                    canvas.drawCircle(12f, 12f, 9f, paint)
+                    canvas.drawLine(12f, 10f, 12f, 17f, paint)
+                    paint.style = Paint.Style.FILL
+                    canvas.drawCircle(12f, 6.5f, 1f, paint)
                 }
             }
             canvas.restore()
