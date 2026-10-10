@@ -1,6 +1,6 @@
 # AdMob banner setup
 
-Version 1.3.0 adds one anchored adaptive banner in a dedicated footer below the counter controls. The banner does not cover the counting button. Counting, names, targets and saved counts continue to work without an internet connection. The footer briefly reserves the banner's adaptive height while an ad loads; failed loads collapse it back to zero height.
+The app displays one anchored adaptive banner in a dedicated footer below the counter controls. The banner does not cover the counting button. Counting, names, targets and saved counts continue to work without an internet connection. The footer briefly reserves the banner's adaptive height while an ad loads; failed loads collapse it back to zero height.
 
 ## IDs and build variants
 
@@ -15,21 +15,27 @@ App IDs use `~`; ad unit IDs use `/`. An app ID cannot be derived from an ad uni
 | --- | --- | --- |
 | `debug` | Google's sample app ID | Google's test anchored adaptive banner |
 | `preview` | Google's sample app ID | Google's test anchored adaptive banner |
+| `live` | Owner's app ID | Owner's banner unit |
 | `release` | Owner's app ID | Owner's banner unit |
 
-Debug and preview always use `ca-app-pub-3940256099942544~3347511713` and `ca-app-pub-3940256099942544/9214589741`. They never request the owner's live ad unit. Use the optimized, test-signed preview APK to interact with and review ads. Do not click live ads to test revenue or serving.
+Debug and preview always use `ca-app-pub-3940256099942544~3347511713` and `ca-app-pub-3940256099942544/9214589741`, with `ADMOB_TEST_ADS=true`. They never request the owner's live ad unit. Live and release use the owner's production IDs with `ADMOB_TEST_ADS=false`. Use the optimized preview APK for repeated ad-interaction testing. Do not click your own live ads to test revenue or serving.
 
-Release defaults to the supplied production IDs. Optional Gradle properties or environment variables named `ADMOB_APP_ID` and `ADMOB_BANNER_ID` can override them. Overrides must have the correct separators and match the owner's publisher account; malformed or mismatched values cause a clear Gradle configuration error.
+Live and release default to the supplied production IDs. Optional Gradle properties or environment variables named `ADMOB_APP_ID` and `ADMOB_BANNER_ID` can override them. Overrides must have the correct separators and match the owner's publisher account; malformed or mismatched values cause a clear Gradle configuration error.
 
 ```sh
 # Installable optimized test APK: always Google test ads
 ./gradlew assemblePreview
 
+# Installable owner review APK: configured live AdMob IDs
+./gradlew assembleLive
+
 # Unsigned production build: uses the owner's real IDs
 ./gradlew assembleRelease bundleRelease
 ```
 
-Release APKs and app bundles still need the owner's production signing process before publication. Providing an AdMob ID does not publish the app, make an ad unit eligible or guarantee ads/revenue. Check the app's readiness and banner status in AdMob before production distribution.
+The main public `Tasbih-Counter-Zikr.apk` and install ZIP contain the live review build. The separate `Tasbih-Counter-Zikr-preview.apk` contains the Google test-ad build. Both public variants retain the cloud signing certificate used by earlier public downloads so updates preserve local data. CI builds use their own generated test certificate; they cannot replace a public APK signed with the cloud key. Use the same download source for subsequent updates. Uninstalling or clearing app data removes local counts.
+
+Live is an installable review variant signed with a test certificate. Release APKs and app bundles still need the owner's production signing process before publication. Providing an AdMob ID does not publish the app, activate the account or app, make an ad unit eligible or guarantee ads/revenue. Real serving remains unverified here. Check AdMob readiness and banner status, internet access, suitable Google Play services and available ad fill before assessing live serving.
 
 ## SDK choice and device support
 

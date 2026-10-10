@@ -59,6 +59,7 @@ public class CounterDeviceTest extends ActivityInstrumentationTestCase2<MainActi
             saved.setGoal(0);
             saved.setCounterName("Device restart");
             saved.setDarkTheme(false);
+            saved.setColorThemeId("ocean");
             saved.setDisplayLightEnabled(false);
             saved.setVibrationEnabled(false);
             for (int i = 0; i < 5; i++) button.performClick();
@@ -76,6 +77,7 @@ public class CounterDeviceTest extends ActivityInstrumentationTestCase2<MainActi
             assertEquals(0, restored.getGoal());
             assertEquals("Device restart", restored.getCounterName());
             assertFalse(restored.getDarkTheme());
+            assertEquals("ocean", restored.getColorThemeId());
             assertFalse(restored.getDisplayLightEnabled());
             assertFalse(restored.getVibrationEnabled());
             assertEquals(1, restored.sessions().size());

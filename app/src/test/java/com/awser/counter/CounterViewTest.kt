@@ -4,6 +4,7 @@ import android.animation.ValueAnimator
 import android.app.Activity
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Rect
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
@@ -119,6 +120,51 @@ class CounterViewTest {
         assertEquals("A reset tap must not increment", 1L, count)
     }
 
+    @Test fun changingPaletteTintsTheLcdWhileKeepingSilverButtonsAndCountIntact() {
+        count = 102L
+        counter.update(count, true)
+        val originalLcd = frameRegion(counter, Rect(60, 86, 300, 173))
+        val silverButton = frameRegion(counter, buttonBounds(counter.counterButton))
+        val resetArtworkArea = Rect(251, 192, 285, 226)
+        val resetArtwork = frameRegion(counter, resetArtworkArea)
+
+        val ocean = CounterThemes.resolve("ocean")
+        counter.setColorTheme(ocean)
+        assertFalse("A chosen palette visibly changes the bright LCD", originalLcd.contentEquals(frameRegion(counter, Rect(60, 86, 300, 173))))
+        assertArrayEquals("The blank silver count button retains its artwork", silverButton, frameRegion(counter, buttonBounds(counter.counterButton)))
+        assertArrayEquals("The small silver reset button retains its artwork", resetArtwork, frameRegion(counter, resetArtworkArea))
+        assertEquals(102L, count)
+        assertTrue(counter.counterButton.contentDescription.toString().contains("102"))
+
+        touch(MotionEvent.ACTION_DOWN)
+        touch(MotionEvent.ACTION_UP)
+        assertEquals("Palette selection keeps native taps working exactly once", 103L, count)
+        val expected = CounterView(activity).apply { setColorTheme(ocean); update(103L, true) }
+        measure(expected)
+        assertArrayEquals("Counting keeps the selected palette", frame(expected), frame(counter))
+    }
+
+    @Test fun unlitLcdStaysNeutralAndRestoresItsSelectedPaletteAfterCounting() {
+        count = 17L
+        counter.update(count, true)
+        counter.setColorTheme(CounterThemes.resolve("rose"))
+        counter.setDisplayLightEnabled(false)
+        val lcd = Rect(60, 86, 300, 173)
+        val neutral = frameRegion(counter, lcd)
+        val ocean = CounterThemes.resolve("ocean")
+        counter.setColorTheme(ocean)
+        assertArrayEquals("An unlit display stays neutral across palette selections", neutral, frameRegion(counter, lcd))
+
+        touch(MotionEvent.ACTION_DOWN)
+        touch(MotionEvent.ACTION_UP)
+        assertEquals(18L, count)
+        assertFalse("The unlit LCD still draws the updated number", neutral.contentEquals(frameRegion(counter, lcd)))
+        counter.setDisplayLightEnabled(true)
+        val expected = CounterView(activity).apply { setColorTheme(ocean); update(18L, true) }
+        measure(expected)
+        assertArrayEquals("Turning lighting back on restores the selected color without losing count", frame(expected), frame(counter))
+    }
+
     @Test fun pauseAndDetachRestoreTheRestingArtworkAfterAnAnimatedPress() {
         setAnimationScale(1f)
         val resting = frame(counter)
@@ -180,6 +226,15 @@ class CounterViewTest {
         bitmap.getPixels(pixels, 0, view.width, 0, 0, view.width, view.height)
         bitmap.recycle()
         return pixels
+    }
+
+    private fun buttonBounds(view: View) = Rect(view.left, view.top, view.right, view.bottom)
+
+    private fun frameRegion(view: View, area: Rect): IntArray {
+        val pixels = frame(view)
+        return IntArray(area.width() * area.height()).also { result ->
+            for (row in 0 until area.height()) pixels.copyInto(result, row * area.width(), (area.top + row) * view.width + area.left, (area.top + row) * view.width + area.right)
+        }
     }
 
     private fun advanceAndExport(milliseconds: Long, index: Int) {

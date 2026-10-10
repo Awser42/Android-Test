@@ -38,11 +38,13 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Test, lint and build
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assemblePreview assembleRelease bundleRelease
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assemblePreview assembleLive assembleRelease bundleRelease
       - name: Name downloadable APKs and bundle
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/preview/app-preview.apk out/Tasbih-Counter-Zikr.apk
+          cp app/build/outputs/apk/live/app-live.apk out/Tasbih-Counter-Zikr.apk
+          cp app/build/outputs/apk/live/app-live.apk out/Tasbih-Counter-Zikr-live-ads.apk
+          cp app/build/outputs/apk/preview/app-preview.apk out/Tasbih-Counter-Zikr-preview.apk
           cp app/build/outputs/apk/debug/app-debug.apk out/Tasbih-Counter-Zikr-debug.apk
           cp app/build/outputs/apk/release/app-release-unsigned.apk out/Tasbih-Counter-Zikr-release-UNSIGNED.apk
           cp app/build/outputs/bundle/release/app-release.aab out/Tasbih-Counter-Zikr-release-UNSIGNED.aab

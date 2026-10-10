@@ -57,14 +57,16 @@ class MainActivity : Activity() {
     private lateinit var counterNameLabel: TextView
     private lateinit var themeButton: Button
     private lateinit var lightButton: Button
+    private lateinit var colorThemeButton: Button
     private lateinit var vibrationButton: Button
     private lateinit var bannerAds: BannerAdController
     private lateinit var adPrivacyButton: Button
     private var adPrivacyRequired = false
     private var adaptiveContent: AdaptiveContent? = null
     private var renderedDarkTheme: Boolean? = null
+    private var renderedColorThemeId: String? = null
     private var progressAnimator: ObjectAnimator? = null
-    private var palette = Palette(true)
+    private var palette = Palette(true, CounterThemes.resolve(CounterThemes.DEFAULT_ID))
     private val numberFormat = NumberFormat.getIntegerInstance()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,8 +84,10 @@ class MainActivity : Activity() {
     }
 
     private fun renderScreen() {
-        palette = Palette(store.darkTheme)
+        val colorTheme = CounterThemes.resolve(store.colorThemeId)
+        palette = Palette(store.darkTheme, colorTheme)
         renderedDarkTheme = store.darkTheme
+        renderedColorThemeId = colorTheme.id
         window.statusBarColor = palette.background
         window.navigationBarColor = palette.background
         @Suppress("DEPRECATION")
@@ -97,7 +101,7 @@ class MainActivity : Activity() {
         }
         root = FrameLayout(this).apply {
             tag = "counter_screen"
-            background = QuietBackground(store.darkTheme)
+            background = QuietBackground(store.darkTheme, colorTheme)
         }
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -107,7 +111,7 @@ class MainActivity : Activity() {
         titleGroup.addView(label("Tasbih Counter", 21f, palette.foreground).apply {
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }, marginParams(-1, -2))
-        titleGroup.addView(label("Z I K R", 9f, palette.muted), marginParams(-1, -2, top = 4))
+        titleGroup.addView(label("Z I K R", 9f, palette.accent), marginParams(-1, -2, top = 4))
         val headerControls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         themeButton = iconButton("theme", "Theme", "theme") {
             if (persistAction { store.setDarkTheme(!store.darkTheme) }) {
@@ -124,8 +128,10 @@ class MainActivity : Activity() {
                 refreshSettings()
             }
         }
+        colorThemeButton = iconButton("theme_colors", "Theme colors", "palette") { showColorThemeDialog() }
         headerControls.addView(themeButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) })
-        headerControls.addView(lightButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+        headerControls.addView(lightButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) })
+        headerControls.addView(colorThemeButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         topPanel.addView(AdaptiveRow(titleGroup, headerControls, equal = false, gap = dp(12)).apply {
             tag = "counter_header"
         }, marginParams(-1, -2))
@@ -155,6 +161,7 @@ class MainActivity : Activity() {
         topPanel.addView(counterNameLabel, marginParams(-1, -2, top = 12))
 
         counter = CounterView(this).apply {
+            setColorTheme(colorTheme)
             setDisplayLightEnabled(store.displayLightEnabled)
             onIncrement = increment@ {
                 val previous = store.count
@@ -249,11 +256,14 @@ class MainActivity : Activity() {
         lightButton.contentDescription = if (store.displayLightEnabled) "Turn display light off" else "Turn display light on"
         lightButton.setCompoundDrawablesWithIntrinsicBounds(Glyph("light", if (store.displayLightEnabled) palette.accent else palette.muted, dp(21)), null, null, null)
         lightButton.background = circularButtonBackground(store.displayLightEnabled)
+        colorThemeButton.contentDescription = "Theme colors. ${CounterThemes.resolve(store.colorThemeId).name} selected"
+        colorThemeButton.background = circularButtonBackground(true)
         if (Build.VERSION.SDK_INT >= 26) {
             vibrationButton.tooltipText = "Haptics ${if (store.vibrationEnabled) "on" else "off"}"
             goalButton.tooltipText = if (store.goal > 0) "Target ${numberFormat.format(store.goal)}" else "Set target"
             themeButton.tooltipText = themeButton.contentDescription
             lightButton.tooltipText = lightButton.contentDescription
+            colorThemeButton.tooltipText = colorThemeButton.contentDescription
         }
     }
 
@@ -409,6 +419,59 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun showColorThemeDialog() {
+        val selectedId = CounterThemes.resolve(store.colorThemeId).id
+        val list = LinearLayout(dialogContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(4), dp(20), dp(14))
+        }
+        lateinit var dialog: AlertDialog
+        CounterThemes.all.forEach { theme ->
+            val selected = theme.id == selectedId
+            val accent = if (store.darkTheme) theme.darkAccent else theme.lightAccent
+            val option = Button(dialogContext()).apply {
+                tag = "color_theme_${theme.id}"
+                text = theme.name + if (selected) "  ✓" else ""
+                isAllCaps = false
+                isSingleLine = false
+                maxLines = Int.MAX_VALUE
+                isSelected = selected
+                textSize = 16f
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setTextColor(palette.foreground)
+                minimumWidth = 0
+                minWidth = 0
+                minimumHeight = dp(48)
+                minHeight = dp(48)
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                compoundDrawablePadding = dp(12)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(ColorSwatch(accent, dp(26)), null, null, null)
+                val background = GradientDrawable().apply {
+                    cornerRadius = dp(14).toFloat()
+                    setColor(palette.surface)
+                    setStroke(dp(if (selected) 2 else 1), if (selected) accent else palette.border)
+                }
+                this.background = RippleDrawable(ColorStateList.valueOf(accentWithAlpha(40)), background, null)
+                contentDescription = "${theme.name} color theme${if (selected) ", selected" else ""}"
+                setOnClickListener {
+                    if (persistAction { store.setColorThemeId(theme.id) }) {
+                        dialog.dismiss()
+                        counter.pauseAnimations()
+                        progressAnimator?.cancel()
+                        renderScreen()
+                    }
+                }
+            }
+            list.addView(option, marginParams(-1, -2, top = 7))
+        }
+        val scroll = ScrollView(dialogContext()).apply {
+            tag = "theme_colors_list"
+            addView(list)
+        }
+        dialog = AlertDialog.Builder(dialogContext()).setTitle("Theme colors").setView(scroll).setNegativeButton("Cancel", null).create()
+        showDialog(dialog)
+    }
+
     private fun iconButton(viewTag: String, title: String, icon: String, action: () -> Unit): Button = Button(this).apply {
         tag = viewTag
         text = ""
@@ -420,7 +483,7 @@ class MainActivity : Activity() {
         minimumHeight = 0
         minHeight = 0
         setPadding(dp(12), 0, dp(12), 0)
-        setCompoundDrawablesWithIntrinsicBounds(Glyph(icon, palette.foreground, dp(21)), null, null, null)
+        setCompoundDrawablesWithIntrinsicBounds(Glyph(icon, palette.accent, dp(21)), null, null, null)
         compoundDrawablePadding = 0
         background = circularButtonBackground(false)
         if (Build.VERSION.SDK_INT >= 26) tooltipText = title
@@ -451,7 +514,7 @@ class MainActivity : Activity() {
             setStroke(dp(1), if (selected) palette.accentBorder else palette.border)
         }
         val mask = GradientDrawable().apply { this.shape = GradientDrawable.OVAL; setColor(Color.WHITE) }
-        return RippleDrawable(ColorStateList.valueOf(Color.argb(40, 140, 220, 174)), shape, mask)
+        return RippleDrawable(ColorStateList.valueOf(accentWithAlpha(40)), shape, mask)
     }
 
     private fun buttonBackground(outlined: Boolean): Drawable {
@@ -461,7 +524,7 @@ class MainActivity : Activity() {
             setColor(palette.surface)
             setStroke(dp(1), if (outlined) palette.accentBorder else palette.border)
         }
-        return RippleDrawable(ColorStateList.valueOf(Color.argb(45, 126, 235, 170)), shape, null)
+        return RippleDrawable(ColorStateList.valueOf(accentWithAlpha(45)), shape, null)
     }
 
     private fun input(value: String, inputKind: Int) = EditText(dialogContext()).apply {
@@ -493,6 +556,7 @@ class MainActivity : Activity() {
     private fun marginParams(width: Int, height: Int, top: Int = 0) = LinearLayout.LayoutParams(width, height).apply { topMargin = dp(top) }
     private fun dp(value: Int) = dp(value.toFloat())
     private fun dp(value: Float) = (value * resources.displayMetrics.density + .5f).toInt()
+    private fun accentWithAlpha(alpha: Int) = Color.argb(alpha, Color.red(palette.accent), Color.green(palette.accent), Color.blue(palette.accent))
 
     private fun countSummary(count: Long, goal: Int): String = if (goal > 0) {
         "${numberFormat.format(count)} total  ·  Target ${numberFormat.format(goal)}"
@@ -516,11 +580,12 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::store.isInitialized && ::counter.isInitialized) {
-            if (renderedDarkTheme != store.darkTheme) {
+            if (renderedDarkTheme != store.darkTheme || renderedColorThemeId != CounterThemes.resolve(store.colorThemeId).id) {
                 counter.pauseAnimations()
                 progressAnimator?.cancel()
                 renderScreen()
             } else {
+                counter.setColorTheme(CounterThemes.resolve(store.colorThemeId))
                 counter.setDisplayLightEnabled(store.displayLightEnabled)
                 refreshSettings()
                 refreshCounterName()
@@ -686,25 +751,32 @@ class MainActivity : Activity() {
         }
     }
 
-    private class Palette(dark: Boolean) {
-        val background = Color.parseColor(if (dark) "#202222" else "#F3F4F0")
-        val surface = Color.parseColor(if (dark) "#141616" else "#FFFFFF")
-        val dialog = Color.parseColor(if (dark) "#272B29" else "#FFFFFF")
+    private class Palette(dark: Boolean, theme: CounterThemes.Theme) {
+        val accent = if (dark) theme.darkAccent else theme.lightAccent
+        val background = blend(Color.parseColor(if (dark) "#202222" else "#F3F4F0"), accent, .025f)
+        val surface = blend(Color.parseColor(if (dark) "#141616" else "#FFFFFF"), accent, .025f)
+        val dialog = blend(Color.parseColor(if (dark) "#272B29" else "#FFFFFF"), accent, .025f)
         val foreground = Color.parseColor(if (dark) "#F4F5F2" else "#222B25")
         val muted = Color.parseColor(if (dark) "#A9B2AC" else "#647168")
-        val accent = Color.parseColor(if (dark) "#74DFA5" else "#23754C")
-        val accentBorder = Color.parseColor(if (dark) "#48775B" else "#7CA58A")
-        val border = Color.parseColor(if (dark) "#343A36" else "#DCE2DB")
+        val accentBorder = blend(surface, accent, .6f)
+        val border = blend(Color.parseColor(if (dark) "#343A36" else "#DCE2DB"), accent, .12f)
+        val glow = blend(background, accent, if (dark) .08f else .045f)
+
+        private fun blend(base: Int, overlay: Int, fraction: Float): Int {
+            fun channel(from: Int, to: Int) = (from + (to - from) * fraction).toInt()
+            return Color.rgb(channel(Color.red(base), Color.red(overlay)), channel(Color.green(base), Color.green(overlay)), channel(Color.blue(base), Color.blue(overlay)))
+        }
     }
 
-    private class QuietBackground(private val dark: Boolean) : Drawable() {
+    private class QuietBackground(dark: Boolean, theme: CounterThemes.Theme) : Drawable() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val palette = Palette(dark, theme)
         override fun draw(canvas: Canvas) {
             val width = bounds.width().toFloat()
             val height = bounds.height().toFloat()
-            canvas.drawColor(Color.parseColor(if (dark) "#202222" else "#F3F4F0"))
+            canvas.drawColor(palette.background)
             paint.shader = RadialGradient(width / 2f, height * .48f, width * .85f,
-                Color.parseColor(if (dark) "#292D2B" else "#E9EEE8"), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+                palette.glow, Color.TRANSPARENT, Shader.TileMode.CLAMP)
             canvas.drawRect(bounds, paint)
             paint.shader = null
             paint.style = Paint.Style.FILL
@@ -712,6 +784,27 @@ class MainActivity : Activity() {
         override fun setAlpha(alpha: Int) { paint.alpha = alpha }
         override fun setColorFilter(colorFilter: ColorFilter?) { paint.colorFilter = colorFilter }
         @Deprecated("Deprecated in Android") override fun getOpacity() = PixelFormat.OPAQUE
+    }
+
+    private class ColorSwatch(private val color: Int, private val size: Int) : Drawable() {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        override fun getIntrinsicWidth() = size
+        override fun getIntrinsicHeight() = size
+        override fun draw(canvas: Canvas) {
+            val cx = bounds.exactCenterX()
+            val cy = bounds.exactCenterY()
+            val radius = min(bounds.width(), bounds.height()) / 2f - 1f
+            paint.style = Paint.Style.FILL
+            paint.color = color
+            canvas.drawCircle(cx, cy, radius, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1f
+            paint.color = Color.argb(70, 140, 140, 140)
+            canvas.drawCircle(cx, cy, radius, paint)
+        }
+        override fun setAlpha(alpha: Int) { paint.alpha = alpha }
+        override fun setColorFilter(colorFilter: ColorFilter?) { paint.colorFilter = colorFilter }
+        @Deprecated("Deprecated in Android") override fun getOpacity() = PixelFormat.TRANSLUCENT
     }
 
     /** Small procedural icons preserve APK size and stay sharp on every screen. */
@@ -739,6 +832,20 @@ class MainActivity : Activity() {
                     canvas.drawLine(9f, 18f, 15f, 18f, paint); canvas.drawLine(10f, 21f, 14f, 21f, paint)
                     canvas.drawLine(12f, 1f, 12f, 0f, paint)
                     canvas.drawLine(3f, 9f, 1f, 9f, paint); canvas.drawLine(21f, 9f, 23f, 9f, paint)
+                }
+                "palette" -> {
+                    val outline = Path().apply {
+                        moveTo(12f, 2f)
+                        cubicTo(6f, 2f, 2f, 6f, 2f, 12f)
+                        cubicTo(2f, 18f, 6f, 22f, 12f, 22f)
+                        cubicTo(15f, 22f, 17f, 19f, 15f, 17f)
+                        cubicTo(14f, 15f, 17f, 14f, 19f, 14f)
+                        cubicTo(24f, 14f, 23f, 3f, 12f, 2f)
+                        close()
+                    }
+                    canvas.drawPath(outline, paint)
+                    paint.style = Paint.Style.FILL
+                    listOf(7f to 8f, 12f to 6f, 17f to 8f, 6f to 13f).forEach { (x, y) -> canvas.drawCircle(x, y, 1.2f, paint) }
                 }
                 "vibration" -> {
                     canvas.drawRoundRect(RectF(8f, 4f, 16f, 20f), 1.5f, 1.5f, paint)

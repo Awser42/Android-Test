@@ -29,8 +29,8 @@ android {
         applicationId = "com.awser.counter"
         minSdk = 23
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.4.0"
+        versionCode = 8
+        versionName = "1.5.0"
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         manifestPlaceholders["adMobAppId"] = testAdMobAppId
         buildConfigField("String", "ADMOB_BANNER_ID", "\"$testAdMobBannerId\"")
@@ -54,6 +54,13 @@ android {
             manifestPlaceholders["adMobAppId"] = testAdMobAppId
             buildConfigField("String", "ADMOB_BANNER_ID", "\"$testAdMobBannerId\"")
             buildConfigField("boolean", "ADMOB_TEST_ADS", "true")
+        }
+        create("live") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            // Installable owner review build using the configured production ad units.
+            // Keep this certificate for updates; the owner's Play release signing is separate.
         }
     }
     compileOptions {

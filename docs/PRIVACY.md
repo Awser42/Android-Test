@@ -4,7 +4,7 @@ Tasbih Counter - Zikr does not require an account. Counting and saved counts wor
 
 ## Data stored on your device
 
-The app stores your current count, saved count snapshots, counter name, optional target and counter settings locally on your Android device. This counter data is not sent to an app server or passed to the advertising SDK. Your current count saves automatically so you can continue after closing and reopening the app. The Save count button creates a separate snapshot; it is not required to keep the current count.
+The app stores your current count, saved count snapshots, counter name, optional target, selected color theme, dark/night mode, display-light choice and other counter settings locally on your Android device. This counter data is not sent to an app server or passed to the advertising SDK. Your current count saves automatically so you can continue after closing and reopening the app. The Save count button creates a separate snapshot; it is not required to keep the current count.
 
 A fresh install has no target until you choose one, and you can turn the target off again. Existing counts and target settings are preserved when upgrading. Resetting a count sets the current total to zero. Deleting a saved snapshot removes that item from the app. The app keeps the latest 100 saved snapshots. Uninstalling the app or clearing its data removes its local counter data.
 
@@ -23,5 +23,7 @@ The app uses Google's User Messaging Platform to refresh consent status and show
 ## Distribution and testing
 
 Downloading APKs and running tests through GitHub uses GitHub's services and is covered by GitHub's own privacy practices. Installing and using the app does not require GitHub access.
+
+The main public APK uses the owner's production AdMob identifiers. The separate preview and debug builds use Google's test identifiers. Both use the advertising and consent SDKs described above; using a test ad unit does not mean those SDKs have no data processing.
 
 This policy describes the source code in this repository. If future versions add data collection or new permissions, the policy must be updated to explain that behavior.

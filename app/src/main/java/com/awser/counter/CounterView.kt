@@ -31,6 +31,7 @@ class CounterView(context: Context) : FrameLayout(context) {
     private var count = 0L
     private var dark = true
     private var lightEnabled = true
+    private var colorTheme = CounterThemes.resolve(CounterThemes.DEFAULT_ID)
     private var hasCount = false
     private var pressing = 0f
     private var displayPulse = 0f
@@ -110,6 +111,13 @@ class CounterView(context: Context) : FrameLayout(context) {
         invalidate()
     }
 
+    /** Changes the LCD and its subtle trim without changing the count or physical artwork. */
+    fun setColorTheme(theme: CounterThemes.Theme) {
+        if (colorTheme == theme) return
+        colorTheme = theme
+        invalidate()
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val density = resources.displayMetrics.density
         val w = resolveSize((360 * density).toInt(), widthMeasureSpec)
@@ -170,7 +178,7 @@ class CounterView(context: Context) : FrameLayout(context) {
         paint.shader = LinearGradient(0f, 22f, 0f, 392f, intArrayOf(Color.rgb(48, 52, 49), Color.rgb(24, 28, 25), Color.rgb(8, 10, 9)), null, Shader.TileMode.CLAMP)
         canvas.drawPath(path, paint)
         paint.shader = null
-        paint.color = Color.argb(46, 173, 181, 175)
+        paint.color = withAlpha(blendColor(Color.rgb(173, 181, 175), accentColor(), .48f), 46)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = .7f
         canvas.drawPath(path, paint)
@@ -184,17 +192,19 @@ class CounterView(context: Context) : FrameLayout(context) {
         paint.shader = null
         paint.style = Paint.Style.FILL
         paint.color = Color.rgb(5, 12, 7)
+        if (lightEnabled) paint.setShadowLayer(6f, 0f, 1f, withAlpha(accentColor(), 35 + (displayPulse * 20).toInt()))
         canvas.drawRoundRect(RectF(55f, 75f, 305f, 178f), 18f, 18f, paint)
+        paint.clearShadowLayer()
         paint.alpha = 255
-        val top = if (lightEnabled) backlightColor(Color.rgb(116, 227, 143)) else Color.rgb(151, 168, 156)
-        val bottom = if (lightEnabled) backlightColor(Color.rgb(77, 207, 113)) else Color.rgb(128, 148, 136)
+        val top = if (lightEnabled) backlightColor(colorTheme.lcdTop) else Color.rgb(151, 168, 156)
+        val bottom = if (lightEnabled) backlightColor(colorTheme.lcdBottom) else Color.rgb(128, 148, 136)
         paint.shader = LinearGradient(0f, 78f, 0f, 174f, top, bottom, Shader.TileMode.CLAMP)
         canvas.drawRoundRect(display, 15f, 15f, paint)
         paint.shader = null
-        paint.color = if (lightEnabled) Color.argb(85, 224, 255, 231) else Color.argb(45, 229, 235, 231)
+        paint.color = if (lightEnabled) withAlpha(blendColor(colorTheme.lcdTop, Color.WHITE, .72f), 85) else Color.argb(45, 229, 235, 231)
         canvas.drawRoundRect(RectF(62f, 82f, 298f, 85f), 2f, 2f, paint)
         text(canvas, "TOTAL COUNT", 180f, 96f, 7.5f,
-            if (lightEnabled) Color.rgb(34, 92, 51) else Color.rgb(46, 66, 53))
+            if (lightEnabled) colorTheme.lcdInk else Color.rgb(46, 66, 53))
         val digits = count.toString().padStart(6, '0')
         val digitWidth = min(30f, 216f / digits.length)
         val start = 180f - digits.length * digitWidth / 2f
@@ -209,7 +219,7 @@ class CounterView(context: Context) : FrameLayout(context) {
         }
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = .8f
-        paint.color = if (lightEnabled) Color.argb(80, 212, 255, 223) else Color.argb(65, 207, 221, 212)
+        paint.color = if (lightEnabled) withAlpha(blendColor(colorTheme.lcdTop, Color.WHITE, .72f), 80) else Color.argb(65, 207, 221, 212)
         canvas.drawRoundRect(display, 15f, 15f, paint)
         paint.style = Paint.Style.FILL
     }
@@ -229,8 +239,9 @@ class CounterView(context: Context) : FrameLayout(context) {
         segments.forEachIndexed { index, points ->
             val active = mask and (1 shl index) != 0
             paint.color = if (active && !leading) {
-                if (lightEnabled) Color.rgb(17, 59, 31) else Color.rgb(18, 34, 24)
-            } else Color.argb(if (active) 23 else 10, 26, 101, 46)
+                if (lightEnabled) colorTheme.lcdInk else Color.rgb(18, 34, 24)
+            } else if (lightEnabled) withAlpha(colorTheme.lcdInk, if (active) 23 else 10)
+                else Color.argb(if (active) 23 else 10, 26, 101, 46)
             path.reset()
             path.moveTo(points[0], points[1])
             for (i in 2 until points.size step 2) path.lineTo(points[i], points[i + 1])
@@ -335,8 +346,16 @@ class CounterView(context: Context) : FrameLayout(context) {
 
     private fun backlightColor(base: Int): Int {
         val amount = displayPulse * .35f
-        fun channel(value: Int, highlight: Int) = (value + (highlight - value) * amount).toInt()
-        return Color.rgb(channel(Color.red(base), 193), channel(Color.green(base), 255), channel(Color.blue(base), 208))
+        return blendColor(base, Color.WHITE, amount)
+    }
+
+    private fun accentColor() = if (dark) colorTheme.darkAccent else colorTheme.lightAccent
+
+    private fun withAlpha(color: Int, alpha: Int) = Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+
+    private fun blendColor(base: Int, highlight: Int, amount: Float): Int {
+        fun channel(value: Int, target: Int) = (value + (target - value) * amount).toInt()
+        return Color.rgb(channel(Color.red(base), Color.red(highlight)), channel(Color.green(base), Color.green(highlight)), channel(Color.blue(base), Color.blue(highlight)))
     }
 
     fun pauseAnimations() {

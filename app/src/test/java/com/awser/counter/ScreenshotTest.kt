@@ -1,6 +1,7 @@
 package com.awser.counter
 
 import android.content.Context
+import android.app.AlertDialog
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Insets
@@ -21,6 +22,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowAlertDialog
 import java.io.File
 
 /** Draw the real Android view tree into PNGs; no mock-up or image editor is involved. */
@@ -52,6 +54,59 @@ class ScreenshotTest {
     fun lcdLightOffPortrait() {
         CounterStore(RuntimeEnvironment.getApplication()).setDisplayLightEnabled(false)
         export("counter-display-light-off", 1080, 2400, true)
+    }
+
+    @Test @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun oceanPaletteInDarkMode() {
+        CounterStore(RuntimeEnvironment.getApplication()).setColorThemeId("ocean")
+        export("counter-ocean-dark", 1080, 2400, true)
+    }
+
+    @Test @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun rosePaletteInLightMode() {
+        CounterStore(RuntimeEnvironment.getApplication()).setColorThemeId("rose")
+        export("counter-rose-light", 1080, 2400, false)
+    }
+
+    @Test @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun nativeThemePickerNamesEveryPaletteAndKeepsTheLastChoiceReachable() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        try {
+            val control = activity.window.decorView.findViewWithTag<View>("theme_colors")
+            assertNotNull("The palette picker has a real control", control)
+            assertTrue(control.performClick())
+            shadowOf(Looper.getMainLooper()).idle()
+            val dialog: AlertDialog = ShadowAlertDialog.getLatestAlertDialog()
+            assertTrue(dialog.isShowing)
+            val root = dialog.window!!.decorView
+            val density = activity.resources.displayMetrics.density
+            val width = (324 * density).toInt()
+            val maximumHeight = (752 * density).toInt()
+            repeat(3) {
+                forceLayoutTree(root)
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(maximumHeight, View.MeasureSpec.AT_MOST))
+                root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+            }
+            assertTextFits(root, "counter-theme-picker")
+            CounterThemes.all.forEach { theme ->
+                val choice = root.findViewWithTag<TextView>("color_theme_${theme.id}")
+                assertNotNull("${theme.name} has a named native choice", choice)
+                assertTrue(choice.text.toString().contains(theme.name))
+                assertTouchSize(choice, theme.id, activity, "counter-theme-picker")
+            }
+            savePng(root, "counter-theme-picker", root.width, root.height)
+            val last = root.findViewWithTag<View>("color_theme_monochrome")
+            fullyVisible(last, "Monochrome palette", "counter-theme-picker")
+            assertTrue(last.performClick())
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals("monochrome", CounterStore(activity).colorThemeId)
+            assertEquals("Choosing a palette preserves the count", 102L, CounterStore(activity).count)
+            assertFalse(dialog.isShowing)
+        } finally {
+            controller.pause().stop().destroy()
+        }
     }
 
     @Test @Config(qualifiers = "w320dp-h640dp-xxhdpi")
@@ -183,17 +238,10 @@ class ScreenshotTest {
         val bannerArea = fullyVisible(banner, "ad_banner_container", name)
         assertFalse("Banner must not cover the main counter in $name", Rect.intersects(bannerArea, counterArea))
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        root.draw(Canvas(bitmap))
-        val directory = File(System.getProperty("screenshot.dir", "build/screenshots")).apply { mkdirs() }
-        val output = File(directory, "$name.png")
-        output.outputStream().use { stream -> assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) }
-        assertTrue("Screenshot was exported", output.length() > 10_000)
-        println("Screenshot: ${output.absolutePath}")
-        bitmap.recycle()
+        savePng(root, name, width, height)
 
         // Scrolling is valid on short windows; every control must remain wholly reachable.
-        val tags = mutableListOf("vibration", "goal", "rename", "theme", "light", "save", "history")
+        val tags = mutableListOf("vibration", "goal", "rename", "theme", "light", "theme_colors", "save", "history")
         if (root.findViewWithTag<View>("ad_privacy").visibility == View.VISIBLE) tags += "ad_privacy"
         tags.forEach { tag ->
             val control = root.findViewWithTag<View>(tag)
@@ -208,6 +256,17 @@ class ScreenshotTest {
         val minimum = 48 * activity.resources.displayMetrics.density
         assertTrue("$tag has 48dp touch width in $name", view.width >= minimum)
         assertTrue("$tag has 48dp touch height in $name", view.height >= minimum)
+    }
+
+    private fun savePng(view: View, name: String, width: Int, height: Int) {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        val directory = File(System.getProperty("screenshot.dir", "build/screenshots") ?: "build/screenshots").apply { mkdirs() }
+        val output = File(directory, "$name.png")
+        output.outputStream().use { stream -> assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) }
+        assertTrue("Screenshot was exported", output.length() > 10_000)
+        println("Screenshot: ${output.absolutePath}")
+        bitmap.recycle()
     }
 
     private fun fullyVisible(view: View, tag: String, name: String): Rect {

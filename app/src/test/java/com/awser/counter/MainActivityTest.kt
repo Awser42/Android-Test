@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Looper
 import android.view.View
+import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import org.junit.After
@@ -25,12 +26,15 @@ import org.robolectric.shadows.ShadowAlertDialog
 class MainActivityTest {
     private lateinit var controller: ActivityController<MainActivity>
     private lateinit var activity: MainActivity
+    private val bannerControllers = mutableListOf<TestBannerAdController>()
     private val store get() = CounterStore(RuntimeEnvironment.getApplication())
 
     @Before fun launch() {
         RuntimeEnvironment.getApplication().getSharedPreferences(CounterStore.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear().commit()
         store.setVibrationEnabled(false)
-        BannerAds.factory = { activity, privacyChanged -> TestBannerAdController(activity, privacyChanged) }
+        BannerAds.factory = { activity, privacyChanged ->
+            TestBannerAdController(activity, privacyChanged).also { bannerControllers.add(it) }
+        }
         controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         activity = controller.get()
     }
@@ -135,6 +139,128 @@ class MainActivityTest {
         assertFalse("Changing the LCD preference must keep the page theme", store.darkTheme)
         click("counter")
         assertEquals(10L, store.count)
+    }
+
+    @Test fun colorChooserNamesItsSwatchesAndCommitsTheChosenColor() {
+        repeat(6) { click("counter") }
+        click("theme_colors")
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertTrue(dialog.isShowing)
+        CounterThemes.all.forEach { theme ->
+            val swatch = colorSwatch(dialog, theme.id)
+            assertTrue("${theme.id} has a visible name", swatch.text.toString().contains(theme.name))
+            assertEquals("Only the current color is selected", theme.id == CounterThemes.DEFAULT_ID, swatch.isSelected)
+        }
+        assertTrue(colorSwatch(dialog, CounterThemes.DEFAULT_ID).contentDescription.toString().contains("selected", ignoreCase = true))
+        assertTrue(colorSwatch(dialog, "ocean").performClick())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse("Selecting a color closes its chooser", dialog.isShowing)
+        assertEquals("ocean", store.colorThemeId)
+        assertEquals(6L, store.count)
+        assertEquals(0, store.goal)
+        assertEquals(View.GONE, tagged("progress").visibility)
+
+        chooseColor("rose")
+        assertEquals("rose", store.colorThemeId)
+        assertEquals(6L, store.count)
+        click("theme_colors")
+        val reopened = ShadowAlertDialog.getLatestAlertDialog()
+        assertTrue(colorSwatch(reopened, "rose").isSelected)
+        assertTrue(colorSwatch(reopened, "rose").contentDescription.toString().contains("selected", ignoreCase = true))
+        assertFalse(colorSwatch(reopened, "ocean").isSelected)
+        reopened.dismiss()
+    }
+
+    @Test fun selectedColorAndActiveCounterSurviveActivityRecreation() {
+        store.setCounterName("Evening zikr")
+        store.setGoal(250)
+        repeat(9) { click("counter") }
+        chooseColor("ocean")
+        controller.pause().stop().destroy()
+        controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        activity = controller.get()
+
+        assertEquals("ocean", store.colorThemeId)
+        assertEquals(9L, store.count)
+        assertEquals(250, store.goal)
+        assertEquals("Evening zikr", (tagged("counter_name_label") as TextView).text.toString())
+        assertTrue(countText().contains("9"))
+        assertEquals(View.VISIBLE, tagged("progress").visibility)
+        click("theme_colors")
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertTrue(colorSwatch(dialog, "ocean").isSelected)
+        assertFalse(colorSwatch(dialog, CounterThemes.DEFAULT_ID).isSelected)
+        dialog.dismiss()
+        click("counter")
+        assertEquals(10L, store.count)
+    }
+
+    @Test fun choosingColorsKeepsPageThemeLcdLightAndFreeCountingIndependent() {
+        store.setCounterName("Morning zikr")
+        repeat(4) { click("counter") }
+        click("theme")
+        click("light")
+        assertFalse(store.darkTheme)
+        assertFalse(store.displayLightEnabled)
+
+        chooseColor("teal")
+        assertFalse(store.darkTheme)
+        assertFalse(store.displayLightEnabled)
+        assertFalse(store.vibrationEnabled)
+        assertEquals(4L, store.count)
+        assertEquals(0, store.goal)
+        assertEquals("Morning zikr", store.counterName)
+        assertEquals(View.GONE, tagged("progress").visibility)
+
+        click("theme")
+        click("light")
+        assertTrue(store.darkTheme)
+        assertTrue(store.displayLightEnabled)
+        assertEquals("teal", store.colorThemeId)
+        chooseColor("amber")
+        assertTrue(store.darkTheme)
+        assertTrue(store.displayLightEnabled)
+        assertEquals(4L, store.count)
+        assertEquals(0, store.goal)
+        assertEquals(View.GONE, tagged("progress").visibility)
+        click("counter")
+        assertEquals(5L, store.count)
+    }
+
+    @Test fun returningToForegroundReflectsAColorChangedByAnotherStore() {
+        chooseColor("ocean")
+        repeat(3) { click("counter") }
+        controller.pause()
+        val updated = CounterStore(activity)
+        updated.setColorThemeId("violet")
+        controller.resume()
+
+        assertEquals("violet", store.colorThemeId)
+        assertEquals(3L, store.count)
+        assertEquals(0, store.goal)
+        assertTrue(countText().contains("3"))
+        click("theme_colors")
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertTrue(colorSwatch(dialog, "violet").isSelected)
+        assertTrue(colorSwatch(dialog, "violet").contentDescription.toString().contains("selected", ignoreCase = true))
+        assertFalse(colorSwatch(dialog, "ocean").isSelected)
+        dialog.dismiss()
+    }
+
+    @Test fun colorRerendersReattachTheExistingBannerWithoutCreatingAnotherController() {
+        val ads = bannerControllers.single()
+        val banner = tagged("test_banner_fixture")
+        repeat(5) { click("counter") }
+        listOf("ocean", "rose", "gold").forEach { id ->
+            chooseColor(id)
+            assertEquals("Color changes must reuse the banner controller", 1, bannerControllers.size)
+            assertSame(ads, bannerControllers.single())
+            assertSame("The same banner view is reattached", banner, tagged("test_banner_fixture"))
+        }
+        assertEquals("Color changes must not restart consent or ad initialization", 1, ads.events.count { it == "start" })
+        assertFalse("The active banner must not be destroyed by a color change", ads.events.contains("destroy"))
+        assertEquals(5L, store.count)
+        assertEquals(0, store.goal)
     }
 
     @Test @Config(sdk = [23])
@@ -321,6 +447,22 @@ class MainActivityTest {
         assertNotNull(list)
         list.performItemClick(null, index, list.adapter.getItemId(index))
         shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private fun colorSwatch(dialog: AlertDialog, id: String): Button {
+        val swatch = dialog.window!!.decorView.findViewWithTag<Button>("color_theme_$id")
+        assertNotNull("A named color control exists for $id", swatch)
+        return swatch
+    }
+
+    private fun chooseColor(id: String) {
+        click("theme_colors")
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertTrue(dialog.isShowing)
+        assertTrue("$id is selectable", colorSwatch(dialog, id).performClick())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse("A successful color choice closes the chooser", dialog.isShowing)
+        assertEquals(id, store.colorThemeId)
     }
 
     private fun clickDialogButton(dialog: AlertDialog, which: Int) {

@@ -24,6 +24,7 @@ class CounterStore(context: Context) {
     val darkTheme: Boolean get() = synchronized(lock) { readBoolean(DARK_THEME, true) }
     val vibrationEnabled: Boolean get() = synchronized(lock) { readBoolean(VIBRATION, true) }
     val displayLightEnabled: Boolean get() = synchronized(lock) { readBoolean(DISPLAY_LIGHT_ENABLED, true) }
+    val colorThemeId: String get() = synchronized(lock) { CounterThemes.resolve(readString(COLOR_THEME_ID, CounterThemes.DEFAULT_ID)).id }
     val counterName: String get() = synchronized(lock) { cleanLabel(readString(COUNTER_NAME, DEFAULT_COUNTER_NAME)) }
 
     fun increment(): Long = synchronized(lock) {
@@ -52,6 +53,10 @@ class CounterStore(context: Context) {
 
     fun setDisplayLightEnabled(enabled: Boolean) = synchronized(lock) {
         commit(preferences.edit().putBoolean(DISPLAY_LIGHT_ENABLED, enabled))
+    }
+
+    fun setColorThemeId(id: String) = synchronized(lock) {
+        commit(preferences.edit().putString(COLOR_THEME_ID, CounterThemes.resolve(id).id))
     }
 
     fun setCounterName(value: String) = synchronized(lock) {
@@ -141,6 +146,7 @@ class CounterStore(context: Context) {
         private const val DARK_THEME = "dark_theme"
         private const val VIBRATION = "vibration"
         private const val DISPLAY_LIGHT_ENABLED = "display_light_enabled"
+        private const val COLOR_THEME_ID = "color_theme_id"
         private const val COUNTER_NAME = "counter_name"
         private const val SESSIONS = "sessions"
     }

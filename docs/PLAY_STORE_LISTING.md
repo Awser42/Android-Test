@@ -22,7 +22,7 @@ Features:
 - An editable counter name.
 - Saved snapshots you can restore or delete.
 - A confirmation before resetting your current count.
-- Light and dark themes.
+- 16 named color themes with light and dark modes, with your selection saved for next time.
 - A display light you can switch on or off.
 - Optional vibration feedback.
 - Reduced-motion support through Android's animation setting.
@@ -39,4 +39,4 @@ Built for Android 6.0 and newer, with a compact native interface for straightfor
 
 This is a draft for review, not a published Google Play listing. The title contains 21 characters and the short description contains 78 characters. The wording describes the current features; it does not promise search rankings or downloads.
 
-The downloadable preview APK uses a test certificate. Prepare the production-signed app bundle, Play Console declarations, store artwork and a publicly accessible privacy-policy URL before submitting a release. Declare that the app contains ads and review the data-safety answers against Google's Mobile Ads SDK disclosure and the final SDK configuration. The repository privacy policy is [PRIVACY.md](PRIVACY.md).
+The main public APK uses the owner's live AdMob IDs and a cloud test certificate. The separate preview APK uses Google's test ad IDs and the same certificate; use it for repeated ad-interaction testing. Real ad serving has not been verified here. Prepare the production-signed app bundle, Play Console declarations, store artwork and a publicly accessible privacy-policy URL before submitting a release. Declare that the app contains ads and review the data-safety answers against Google's Mobile Ads SDK disclosure and the final SDK configuration. The repository privacy policy is [PRIVACY.md](PRIVACY.md).

@@ -33,6 +33,8 @@ class CounterStoreTest {
         assertTrue(store.darkTheme)
         assertTrue(store.vibrationEnabled)
         assertTrue(store.displayLightEnabled)
+        assertEquals(CounterThemes.DEFAULT_ID, store.colorThemeId)
+        assertFalse(prefs.contains("color_theme_id"))
         assertEquals("Counter", store.counterName)
         assertTrue(store.sessions().isEmpty())
     }
@@ -142,6 +144,54 @@ class CounterStoreTest {
         assertTrue(CounterStore(context).displayLightEnabled)
         assertTrue(store.displayLightEnabled)
         assertTrue(prefs.getBoolean("display_light_enabled", false))
+    }
+
+    @Test fun everyColorThemeSelectionSurvivesFreshStoreInstances() {
+        CounterThemes.all.forEach { theme ->
+            store.setColorThemeId(theme.id)
+            assertEquals(theme.id, store.colorThemeId)
+            assertEquals(theme.id, CounterStore(context).colorThemeId)
+            assertEquals(theme.id, prefs.getString("color_theme_id", null))
+        }
+    }
+
+    @Test fun unknownOrWrongTypedColorPreferencesUseTheDefaultWithoutLosingData() {
+        store.updateCount(58L)
+        prefs.edit().putString("color_theme_id", "unknown-palette").commit()
+        assertEquals(CounterThemes.DEFAULT_ID, CounterStore(context).colorThemeId)
+        prefs.edit().putInt("color_theme_id", 9).commit()
+        assertEquals(CounterThemes.DEFAULT_ID, CounterStore(context).colorThemeId)
+        assertEquals(58L, store.count)
+
+        store.setColorThemeId("unknown-palette")
+        assertEquals(CounterThemes.DEFAULT_ID, prefs.getString("color_theme_id", null))
+        assertEquals(CounterThemes.DEFAULT_ID, CounterStore(context).colorThemeId)
+        assertEquals(58L, store.count)
+    }
+
+    @Test fun changingColorsPreservesTheCounterOtherSettingsAndSavedSessions() {
+        store.updateCount(102L)
+        store.setGoal(250)
+        store.setCounterName("Steps")
+        store.setDarkTheme(false)
+        store.setVibrationEnabled(false)
+        store.setDisplayLightEnabled(false)
+        val saved = store.saveSession(store.counterName)
+
+        CounterThemes.all.forEach { theme ->
+            store.setColorThemeId(theme.id)
+            val restarted = CounterStore(context)
+            assertEquals(theme.id, restarted.colorThemeId)
+            assertEquals(102L, restarted.count)
+            assertEquals(250, restarted.goal)
+            assertEquals("Steps", restarted.counterName)
+            assertFalse(restarted.darkTheme)
+            assertFalse(restarted.vibrationEnabled)
+            assertFalse(restarted.displayLightEnabled)
+            assertEquals(listOf(saved), restarted.sessions())
+        }
+        assertTrue(store.restoreSession(saved.id))
+        assertEquals(CounterThemes.all.last().id, CounterStore(context).colorThemeId)
     }
 
     @Test fun changingDisplayLightLeavesCounterAndSavedSessionsUntouched() {
