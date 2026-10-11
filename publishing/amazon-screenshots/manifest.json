@@ -1,0 +1,42 @@
+{
+  "app": "Tasbih Counter - Zikr",
+  "version": "1.8.0",
+  "version_code": 11,
+  "source_commit": "1337a1a64afed83c3a610f05d305c63665af839c",
+  "native_ui_provenance": "Robolectric API35 NATIVE rendering of shipping MainActivity and dialogs; UI source images unchanged",
+  "background": "imagegen-generated decorative background",
+  "physical_fire_device_capture": false,
+  "ads_requested_during_capture": false,
+  "fake_ad_fixture_used": false,
+  "app_source_changed": false,
+  "files": [
+    {
+      "file": "01-simple-counting.png",
+      "width": 1920,
+      "height": 1200,
+      "bytes": 1993941,
+      "sha256": "8c8c60cad1d1340cd00938c74d67b22895a2ee2397bcf57cae400fce57c2e6ee"
+    },
+    {
+      "file": "02-color-themes.png",
+      "width": 1920,
+      "height": 1200,
+      "bytes": 2149983,
+      "sha256": "133718bc38c66e5a10567b5fbc328809a395d629c6c0c9033f072a58547b1eee"
+    },
+    {
+      "file": "03-save-and-restore.png",
+      "width": 1920,
+      "height": 1200,
+      "bytes": 1993591,
+      "sha256": "6e539305152e1db7399c206490b19a4c66ad3f7f6994a3fb8ce1c5af1b877fd3"
+    },
+    {
+      "file": "04-optional-targets.png",
+      "width": 1920,
+      "height": 1200,
+      "bytes": 1976499,
+      "sha256": "08e8449c121a781b01d8b8d81ad30e1e397108c026350e7c0eda6438722b87b1"
+    }
+  ]
+}

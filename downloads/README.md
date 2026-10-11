@@ -7,6 +7,7 @@ Version **1.8.0 / build 11**, Android 6.0/API 23 or newer.
 - [Install ZIP](https://github.com/Awser42/Android-Test/raw/refs/heads/main/downloads/Tasbih-Counter-Zikr-install.zip): contains the phone-update APK.
 - [Complete source ZIP](https://github.com/Awser42/Android-Test/raw/refs/heads/main/downloads/Tasbih-Counter-Zikr-source.zip): Gradle wrapper, app code/resources, tests, scripts, CI and documentation. Extract and open the Android-Test folder in Android Studio.
 - [Publishing ZIP](https://github.com/Awser42/Android-Test/raw/refs/heads/main/downloads/Tasbih-Counter-Zikr-publishing.zip): icon PNGs, listing text, privacy policy and app-ads.txt entry.
+- [Amazon landscape screenshots ZIP](https://github.com/Awser42/Android-Test/raw/refs/heads/main/downloads/Tasbih-Counter-Zikr-Amazon-Screenshots.zip): four designed 1920 x 1200 feature PNGs using the actual native app UI. Extract and upload the PNGs individually in filename order. [Preview and provenance](../publishing/amazon-screenshots/README.md).
 - [Google test-ad preview APK](https://github.com/Awser42/Android-Test/raw/refs/heads/main/downloads/Tasbih-Counter-Zikr-preview.apk): use for repeated ad-interaction testing.
 
 The store APK has a new production certificate and cannot normally update an installed phone-review APK. Keep the separately delivered **private signing backup** for future production releases. It is excluded from this public repository, source and publishing ZIPs. GitHub Actions uses another generated review certificate. Uninstalling or clearing app data removes local counter data.
